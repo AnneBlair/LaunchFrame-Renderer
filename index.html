@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>LaunchFrame · App Store 宣传图预览</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="workspace">
+      <aside class="controls" aria-label="宣传图设置">
+        <header class="controls-header">
+          <div class="product-mark" aria-hidden="true">LF</div>
+          <div>
+            <p class="eyebrow">LaunchFrame</p>
+            <h1>App Store 宣传图</h1>
+          </div>
+        </header>
+
+        <p class="intro">
+          第一版竖版模板。修改文案、替换 iOS 截图或切换原机框，右侧会实时渲染。
+        </p>
+
+        <section class="control-section" aria-labelledby="content-heading">
+          <div class="section-heading">
+            <span class="section-index">01</span>
+            <h2 id="content-heading">文案</h2>
+          </div>
+
+          <label class="field" for="titleInput">
+            <span>主标题</span>
+            <textarea id="titleInput" rows="3" spellcheck="false"></textarea>
+          </label>
+
+          <label class="field" for="subtitleInput">
+            <span>说明文案</span>
+            <textarea id="subtitleInput" rows="3" spellcheck="false"></textarea>
+          </label>
+        </section>
+
+        <section class="control-section" aria-labelledby="device-heading">
+          <div class="section-heading">
+            <span class="section-index">02</span>
+            <h2 id="device-heading">设备与截图</h2>
+          </div>
+
+          <label class="field" for="frameSelect">
+            <span>iPhone 原机框</span>
+            <select id="frameSelect"></select>
+          </label>
+
+          <div class="field">
+            <span>iOS 截图</span>
+            <input
+              id="screenshotInput"
+              class="visually-hidden"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+            />
+            <label class="upload-button" for="screenshotInput">
+              <span>选择截图</span>
+              <small id="screenshotName">当前使用示例截图</small>
+            </label>
+          </div>
+
+          <label class="field" for="fitSelect">
+            <span>截图填充方式</span>
+            <select id="fitSelect">
+              <option value="cover">铺满屏幕</option>
+              <option value="contain">完整显示</option>
+            </select>
+          </label>
+        </section>
+
+        <section class="control-section" aria-labelledby="layout-heading">
+          <div class="section-heading">
+            <span class="section-index">03</span>
+            <h2 id="layout-heading">构图微调</h2>
+          </div>
+
+          <label class="range-field" for="deviceWidthInput">
+            <span>
+              <span>手机宽度</span>
+              <output id="deviceWidthOutput" for="deviceWidthInput"></output>
+            </span>
+            <input id="deviceWidthInput" type="range" min="760" max="1120" step="2" />
+          </label>
+
+          <label class="range-field" for="deviceTopInput">
+            <span>
+              <span>手机上边距</span>
+              <output id="deviceTopOutput" for="deviceTopInput"></output>
+            </span>
+            <input id="deviceTopInput" type="range" min="500" max="900" step="2" />
+          </label>
+        </section>
+
+        <div class="controls-actions">
+          <button id="resetButton" class="secondary-button" type="button">恢复默认</button>
+          <button id="focusButton" class="primary-button" type="button">专注预览</button>
+        </div>
+
+        <footer class="controls-footer">
+          <span>画布</span>
+          <strong>1320 × 2868 px</strong>
+          <span id="zoomLabel" class="zoom-label"></span>
+        </footer>
+      </aside>
+
+      <main id="stage" class="stage" aria-label="宣传图预览区域">
+        <div id="canvasShell" class="canvas-shell">
+          <article id="artboard" class="artboard" aria-label="App Store 宣传图画布">
+            <header class="poster-copy">
+              <h2 id="posterTitle"></h2>
+              <p id="posterSubtitle"></p>
+            </header>
+
+            <div id="device" class="device" aria-label="iPhone 预览">
+              <div id="deviceScreen" class="device-screen">
+                <img id="screenshotImage" alt="应用截图" />
+                <div id="screenPlaceholder" class="screen-placeholder" hidden>
+                  <span>上传 iOS 截图</span>
+                </div>
+              </div>
+              <img id="frameImage" class="frame-image" alt="" />
+            </div>
+          </article>
+        </div>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,87 @@
+# LaunchFrame Renderer
+
+一个零依赖的 App Store 宣传图 HTML 渲染器。它把 iOS 截图、iPhone 原机框和固定营销文案组合成可预览、可自动化截图的 `1320 × 2868` 竖版画布。
+
+![LaunchFrame Renderer preview](docs/preview.jpg)
+
+## 当前能力
+
+- 在浏览器中实时编辑主标题与说明文案
+- 上传 PNG、JPEG 或 WebP 格式的 iOS 截图
+- 切换 15 款 iPhone 17、iPhone 17 Pro、iPhone 17 Pro Max 和 iPhone Air 竖版机框
+- 调整手机宽度和垂直位置
+- 提供无编辑器的纯渲染模式，便于 Playwright、Puppeteer 或其他浏览器自动化工具截图
+- 不依赖框架、构建工具或第三方 JavaScript 库
+
+## 快速开始
+
+```bash
+python3 -m http.server 4173
+```
+
+然后访问：
+
+```text
+http://localhost:4173/
+```
+
+页面默认使用 `assets/sample-screenshot.png`，也可以在编辑面板中选择任意本地 iOS 截图。
+
+## 自动化渲染
+
+纯渲染入口：
+
+```text
+http://localhost:4173/?render=1
+```
+
+支持通过查询参数配置内容：
+
+| 参数 | 说明 | 示例 |
+| --- | --- | --- |
+| `title` | 主标题，支持换行 | `title=Learn%20faster` |
+| `subtitle` | 说明文案，支持换行 | `subtitle=One%20lesson%20at%20a%20time` |
+| `frame` | 机框 ID | `frame=iphone-17-black` |
+| `screenshot` | 可访问的截图 URL | `screenshot=./screens/home.png` |
+| `fit` | `cover` 或 `contain` | `fit=cover` |
+| `deviceWidth` | 手机在画布中的宽度 | `deviceWidth=930` |
+| `deviceTop` | 手机距离画布顶部的位置 | `deviceTop=730` |
+
+示例：
+
+```text
+http://localhost:4173/?render=1&frame=iphone-17-pro-max-deep-blue&deviceTop=730
+```
+
+在 `1320 × 2868` 浏览器视口下截取页面，即可得到完整画布。后续可以把模拟器截图路径和多语言文案直接注入这些参数。
+
+## 项目结构
+
+```text
+.
+├── index.html
+├── styles.css
+├── app.js
+├── assets/
+│   ├── frames/
+│   └── sample-screenshot.png
+└── docs/
+    └── preview.jpg
+```
+
+## 路线图
+
+- 模拟器自动启动、导航与截图
+- 多语言文案配置和批量渲染
+- App Store Connect 尺寸预设
+- PNG 批量导出
+
+## 素材与商标
+
+MIT License 只覆盖本仓库原创代码。`assets/frames`、示例截图及预览图中的第三方设备图像、商标和产品外观不包含在 MIT 授权范围内。使用或再分发前请阅读 [THIRD_PARTY_ASSETS.md](THIRD_PARTY_ASSETS.md)，并自行确认对应权利方的使用条款。
+
+本项目与 Apple Inc. 无隶属或背书关系。Apple、iPhone 和 App Store 是 Apple Inc. 的商标。
+
+## License
+
+原创代码基于 [MIT License](LICENSE) 开源。
