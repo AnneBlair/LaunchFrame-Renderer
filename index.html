@@ -98,11 +98,16 @@
 
         <div class="controls-actions">
           <button id="resetButton" class="secondary-button" type="button">恢复默认</button>
-          <button id="focusButton" class="primary-button" type="button">专注预览</button>
+          <button id="focusButton" class="secondary-button" type="button">专注预览</button>
+          <button id="exportButton" class="primary-button export-button" type="button">
+            导出 PNG 图片
+          </button>
         </div>
 
+        <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
+
         <footer class="controls-footer">
-          <span>画布</span>
+          <span>6.9″ 画布</span>
           <strong>1320 × 2868 px</strong>
           <span id="zoomLabel" class="zoom-label"></span>
         </footer>
@@ -118,7 +123,7 @@
 
             <div id="device" class="device" aria-label="iPhone 预览">
               <div id="deviceScreen" class="device-screen">
-                <img id="screenshotImage" alt="应用截图" />
+                <img id="screenshotImage" crossorigin="anonymous" alt="应用截图" />
                 <div id="screenPlaceholder" class="screen-placeholder" hidden>
                   <span>上传 iOS 截图</span>
                 </div>

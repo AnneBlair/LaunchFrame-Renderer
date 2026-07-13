@@ -1,6 +1,6 @@
 # LaunchFrame Renderer
 
-一个零依赖的 App Store 宣传图 HTML 渲染器。它把 iOS 截图、iPhone 原机框和固定营销文案组合成可预览、可自动化截图的 `1320 × 2868` 竖版画布。
+一个零依赖的 App Store 宣传图 HTML 渲染器。它把 iOS 截图、iPhone 原机框和固定营销文案组合成可预览、可导出 PNG、可自动化截图的 `1320 × 2868` 竖版画布。
 
 ![LaunchFrame Renderer preview](docs/preview.jpg)
 
@@ -10,8 +10,13 @@
 - 上传 PNG、JPEG 或 WebP 格式的 iOS 截图
 - 切换 15 款 iPhone 17、iPhone 17 Pro、iPhone 17 Pro Max 和 iPhone Air 竖版机框
 - 调整手机宽度和垂直位置
+- 一键把当前画布导出为本地 `1320 × 2868` PNG 图片
 - 提供无编辑器的纯渲染模式，便于 Playwright、Puppeteer 或其他浏览器自动化工具截图
 - 不依赖框架、构建工具或第三方 JavaScript 库
+
+## App Store 截图尺寸
+
+当前画布的 `1320 × 2868` 是 Apple 接受的 6.9 英寸 iPhone 竖版截图尺寸之一。`1242 × 2688` 也仍然有效，但对应 6.5 英寸档，并不是唯一的 iPhone 截图规格。完整规格请参阅 [Apple 官方截屏规范](https://developer.apple.com/cn/help/app-store-connect/reference/app-information/screenshot-specifications/)。
 
 ## 快速开始
 
@@ -46,6 +51,8 @@ http://localhost:4173/?render=1
 | `fit` | `cover` 或 `contain` | `fit=cover` |
 | `deviceWidth` | 手机在画布中的宽度 | `deviceWidth=930` |
 | `deviceTop` | 手机距离画布顶部的位置 | `deviceTop=730` |
+
+跨域 `screenshot` URL 需要由图片服务器返回允许当前页面读取的 CORS 响应头；同源图片和在编辑面板中上传的本地图片不受影响。
 
 示例：
 

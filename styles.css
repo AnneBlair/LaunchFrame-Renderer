@@ -245,6 +245,11 @@ input[type="range"],
   font-weight: 680;
 }
 
+.controls-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .secondary-button {
   border: 1px solid rgb(255 255 255 / 12%);
   color: #e5e6e8;
@@ -255,6 +260,23 @@ input[type="range"],
   border: 1px solid #f4f0e7;
   color: #18191c;
   background: #f4f0e7;
+}
+
+.export-button {
+  grid-column: 1 / -1;
+}
+
+.export-status {
+  min-height: 15px;
+  margin: -18px 0 0;
+  color: #92969f;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.export-status.is-error {
+  color: #ffaaa0;
 }
 
 .controls-footer {

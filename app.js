@@ -106,6 +106,7 @@ const DEFAULTS = Object.freeze({
 });
 
 const elements = {
+  controls: document.querySelector(".controls"),
   artboard: document.querySelector("#artboard"),
   canvasShell: document.querySelector("#canvasShell"),
   stage: document.querySelector("#stage"),
@@ -128,12 +129,15 @@ const elements = {
   deviceTopOutput: document.querySelector("#deviceTopOutput"),
   resetButton: document.querySelector("#resetButton"),
   focusButton: document.querySelector("#focusButton"),
+  exportButton: document.querySelector("#exportButton"),
+  exportStatus: document.querySelector("#exportStatus"),
   zoomLabel: document.querySelector("#zoomLabel"),
 };
 
 const params = new URLSearchParams(window.location.search);
 const isRenderMode = params.get("render") === "1";
 let screenshotObjectUrl = null;
+let isExporting = false;
 
 const state = {
   title: params.get("title") ?? DEFAULTS.title,
@@ -250,6 +254,304 @@ function resizePreview() {
   elements.zoomLabel.textContent = `${Math.round(scale * 100)}%`;
 }
 
+async function decodeImage(image, label) {
+  if (typeof image.decode === "function") {
+    try {
+      await image.decode();
+    } catch {
+      // Some browsers reject decode() for an image that has already loaded.
+    }
+  }
+
+  if (!image.complete || image.naturalWidth === 0 || image.naturalHeight === 0) {
+    throw new Error(`${label}尚未加载完成`);
+  }
+}
+
+function roundedRectPath(context, x, y, width, height, radius) {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.arcTo(x + width, y, x + width, y + height, safeRadius);
+  context.arcTo(x + width, y + height, x, y + height, safeRadius);
+  context.arcTo(x, y + height, x, y, safeRadius);
+  context.arcTo(x, y, x + width, y, safeRadius);
+  context.closePath();
+}
+
+function drawImageWithFit(context, image, x, y, width, height, fit) {
+  const scale =
+    fit === "contain"
+      ? Math.min(width / image.naturalWidth, height / image.naturalHeight)
+      : Math.max(width / image.naturalWidth, height / image.naturalHeight);
+  const imageWidth = image.naturalWidth * scale;
+  const imageHeight = image.naturalHeight * scale;
+
+  context.drawImage(
+    image,
+    x + (width - imageWidth) / 2,
+    y + (height - imageHeight) / 2,
+    imageWidth,
+    imageHeight,
+  );
+}
+
+function measureSpacedText(context, characters, letterSpacing) {
+  return (
+    characters.reduce((width, character) => width + context.measureText(character).width, 0) +
+    Math.max(0, characters.length - 1) * letterSpacing
+  );
+}
+
+function drawCenteredText(context, text, centerX, baseline, letterSpacing) {
+  if ("letterSpacing" in context) {
+    context.letterSpacing = `${letterSpacing}px`;
+    context.textAlign = "center";
+    context.fillText(text, centerX, baseline);
+    context.letterSpacing = "0px";
+    return;
+  }
+
+  const characters = Array.from(text);
+  let cursorX = centerX - measureSpacedText(context, characters, letterSpacing) / 2;
+
+  context.textAlign = "left";
+  for (const character of characters) {
+    context.fillText(character, cursorX, baseline);
+    cursorX += context.measureText(character).width + letterSpacing;
+  }
+}
+
+function getRenderedTextLines(element) {
+  const textNode = element.firstChild;
+  const text = textNode?.textContent ?? "";
+  if (!text) return [];
+
+  const lines = [];
+  let currentLine = "";
+  let currentTop = null;
+  let offset = 0;
+
+  for (const character of Array.from(text)) {
+    const nextOffset = offset + character.length;
+
+    if (character === "\n") {
+      lines.push(currentLine.trimEnd());
+      currentLine = "";
+      currentTop = null;
+      offset = nextOffset;
+      continue;
+    }
+
+    const range = document.createRange();
+    range.setStart(textNode, offset);
+    range.setEnd(textNode, nextOffset);
+    const rect = range.getClientRects()[0];
+    const isCollapsibleSpace = /[\t\f ]/.test(character);
+
+    if (rect?.width) {
+      if (currentTop !== null && Math.abs(rect.top - currentTop) > 2) {
+        lines.push(currentLine.trimEnd());
+        currentLine = "";
+      }
+
+      if (isCollapsibleSpace) {
+        if (currentLine && !currentLine.endsWith(" ")) currentLine += " ";
+      } else {
+        currentLine += character;
+      }
+      currentTop = rect.top;
+    }
+
+    offset = nextOffset;
+  }
+
+  if (currentLine || text[text.length - 1] !== "\n") lines.push(currentLine.trimEnd());
+  return lines;
+}
+
+function drawTextBlock(
+  context,
+  { lines, top, font, fontSize, lineHeight, letterSpacing, color },
+) {
+  if (lines.length === 0) return 0;
+
+  context.font = font;
+  context.fillStyle = color;
+  context.textBaseline = "alphabetic";
+
+  const metrics = context.measureText("国Ag");
+  const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
+  const descent = metrics.actualBoundingBoxDescent || fontSize * 0.2;
+  const baselineOffset = (lineHeight - ascent - descent) / 2 + ascent;
+
+  lines.forEach((line, index) => {
+    drawCenteredText(
+      context,
+      line,
+      ARTBOARD.width / 2,
+      top + index * lineHeight + baselineOffset,
+      letterSpacing,
+    );
+  });
+
+  return lines.length * lineHeight;
+}
+
+function drawDeviceShadow(context, x, y, width, height) {
+  const shadowX = x + width * 0.05;
+  const shadowY = y + height * 0.03;
+  const shadowWidth = width * 0.9;
+  const shadowHeight = height * 0.95;
+
+  context.save();
+  context.fillStyle = "rgba(0, 0, 0, 0.18)";
+  context.shadowColor = "rgba(0, 0, 0, 0.25)";
+  context.shadowBlur = 64;
+  context.shadowOffsetY = 42;
+  roundedRectPath(context, shadowX, shadowY, shadowWidth, shadowHeight, width * 0.12);
+  context.fill();
+  context.restore();
+}
+
+function drawPoster(context) {
+  const frame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
+  const geometry = MODEL_GEOMETRY[frame.model];
+  const deviceScale = state.deviceWidth / geometry.frameWidth;
+  const deviceHeight = geometry.frameHeight * deviceScale;
+  const deviceX = (ARTBOARD.width - state.deviceWidth) / 2;
+  const screenX = deviceX + geometry.screenX * deviceScale;
+  const screenY = state.deviceTop + geometry.screenY * deviceScale;
+  const screenWidth = geometry.screenWidth * deviceScale;
+  const screenHeight = geometry.screenHeight * deviceScale;
+
+  context.fillStyle = "#fdfdfc";
+  context.fillRect(0, 0, ARTBOARD.width, ARTBOARD.height);
+  drawDeviceShadow(context, deviceX, state.deviceTop, state.deviceWidth, deviceHeight);
+
+  context.save();
+  roundedRectPath(
+    context,
+    screenX,
+    screenY,
+    screenWidth,
+    screenHeight,
+    geometry.screenRadius * deviceScale,
+  );
+  context.clip();
+  context.fillStyle = "#f2f4f5";
+  context.fillRect(screenX, screenY, screenWidth, screenHeight);
+  drawImageWithFit(
+    context,
+    elements.screenshotImage,
+    screenX,
+    screenY,
+    screenWidth,
+    screenHeight,
+    state.fit,
+  );
+  context.restore();
+
+  context.drawImage(
+    elements.frameImage,
+    deviceX,
+    state.deviceTop,
+    state.deviceWidth,
+    deviceHeight,
+  );
+
+  const titleHeight = drawTextBlock(context, {
+    lines: getRenderedTextLines(elements.posterTitle),
+    top: 130,
+    font: '750 112px "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
+    fontSize: 112,
+    lineHeight: 112 * 1.04,
+    letterSpacing: -5,
+    color: "#050505",
+  });
+
+  drawTextBlock(context, {
+    lines: getRenderedTextLines(elements.posterSubtitle),
+    top: 130 + titleHeight + 60,
+    font: '400 60px "Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif',
+    fontSize: 60,
+    lineHeight: 60 * 1.4,
+    letterSpacing: 2,
+    color: "#1b1b1a",
+  });
+}
+
+function canvasToPngBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error("浏览器未能生成 PNG 文件"));
+        }
+      }, "image/png");
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function downloadBlob(blob) {
+  const downloadUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = downloadUrl;
+  downloadLink.download = `launchframe-${ARTBOARD.width}x${ARTBOARD.height}.png`;
+  document.body.append(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+}
+
+function setExportStatus(message, isError = false) {
+  elements.exportStatus.textContent = message;
+  elements.exportStatus.classList.toggle("is-error", isError);
+}
+
+async function exportPoster() {
+  if (isExporting) return;
+
+  isExporting = true;
+  elements.exportButton.disabled = true;
+  elements.exportButton.textContent = "正在生成 PNG…";
+  setExportStatus("");
+
+  try {
+    await Promise.all([
+      document.fonts?.ready ?? Promise.resolve(),
+      decodeImage(elements.screenshotImage, "iOS 截图"),
+      decodeImage(elements.frameImage, "iPhone 机框"),
+    ]);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = ARTBOARD.width;
+    canvas.height = ARTBOARD.height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器不支持图片导出");
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    drawPoster(context);
+
+    const blob = await canvasToPngBlob(canvas);
+    downloadBlob(blob);
+    setExportStatus(`已生成 ${ARTBOARD.width} × ${ARTBOARD.height} PNG`);
+  } catch (error) {
+    console.error("PNG export failed", error);
+    setExportStatus("导出失败，请确认截图已加载且允许跨域读取。", true);
+  } finally {
+    isExporting = false;
+    elements.exportButton.disabled = false;
+    elements.exportButton.textContent = "导出 PNG 图片";
+  }
+}
+
 function resetState() {
   if (screenshotObjectUrl) {
     URL.revokeObjectURL(screenshotObjectUrl);
@@ -259,6 +561,7 @@ function resetState() {
   Object.assign(state, DEFAULTS);
   elements.screenshotInput.value = "";
   elements.screenshotName.textContent = "当前使用示例截图";
+  setExportStatus("");
   applyState();
 }
 
@@ -270,6 +573,9 @@ function toggleFocusMode(force) {
 }
 
 function bindEvents() {
+  elements.controls.addEventListener("input", () => setExportStatus(""));
+  elements.controls.addEventListener("change", () => setExportStatus(""));
+
   elements.titleInput.addEventListener("input", (event) => {
     state.title = event.target.value;
     elements.posterTitle.textContent = state.title;
@@ -322,6 +628,7 @@ function bindEvents() {
 
   elements.resetButton.addEventListener("click", resetState);
   elements.focusButton.addEventListener("click", () => toggleFocusMode());
+  elements.exportButton.addEventListener("click", exportPoster);
 
   window.addEventListener("resize", resizePreview);
   window.addEventListener("keydown", (event) => {
