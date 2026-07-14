@@ -4,12 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
-    <title>LaunchFrame · App Store 宣传图预览</title>
+    <title>LaunchFrame · iPad App Store 宣传图</title>
     <link rel="stylesheet" href="./styles.css?v=20260714" />
   </head>
-  <body data-product="iphone">
+  <body data-product="ipad">
     <div class="workspace">
-      <aside class="controls" aria-label="iPhone 宣传图设置">
+      <aside class="controls" aria-label="iPad 宣传图设置">
         <header class="controls-header">
           <div class="product-mark" aria-hidden="true">LF</div>
           <div>
@@ -19,12 +19,12 @@
         </header>
 
         <p class="intro">
-          添加一组 iPhone 截图，逐张编辑文案并导出对应的 App Store 宣传图。
+          添加一组 iPad 横屏截图，逐张编辑文案并导出对应的 App Store 宣传图。
         </p>
 
         <nav class="product-switcher" aria-label="设备类型">
-          <a href="./" aria-current="page">iPhone</a>
-          <a href="./ipad.html">iPad</a>
+          <a href="./">iPhone</a>
+          <a href="./ipad.html" aria-current="page">iPad</a>
         </nav>
 
         <section class="control-section" aria-labelledby="screenshots-heading">
@@ -61,8 +61,9 @@
           <label class="field" for="fitSelect">
             <span>当前截图填充方式</span>
             <select id="fitSelect">
-              <option value="cover">铺满屏幕</option>
-              <option value="contain">完整显示</option>
+              <option value="fill">拉伸贴合（不裁剪）</option>
+              <option value="cover">铺满屏幕（可能裁剪）</option>
+              <option value="contain">完整显示（可能留边）</option>
             </select>
           </label>
 
@@ -93,7 +94,7 @@
           </div>
 
           <label class="field" for="frameSelect">
-            <span>iPhone 原机框</span>
+            <span>iPad 原机框</span>
             <select id="frameSelect"></select>
           </label>
         </section>
@@ -106,25 +107,25 @@
 
           <label class="range-field" for="deviceWidthInput">
             <span>
-              <span>手机宽度</span>
+              <span>iPad 宽度</span>
               <output id="deviceWidthOutput" for="deviceWidthInput"></output>
             </span>
-            <input id="deviceWidthInput" type="range" min="760" max="1120" step="2" />
+            <input id="deviceWidthInput" type="range" min="1500" max="2200" step="4" />
           </label>
 
           <label class="range-field" for="deviceTopInput">
             <span>
-              <span>手机上边距</span>
+              <span>iPad 上边距</span>
               <output id="deviceTopOutput" for="deviceTopInput"></output>
             </span>
-            <input id="deviceTopInput" type="range" min="500" max="900" step="2" />
+            <input id="deviceTopInput" type="range" min="460" max="720" step="4" />
           </label>
         </section>
 
         <div id="controlsActions" class="controls-actions">
           <button id="resetButton" class="secondary-button" type="button">恢复默认</button>
           <button id="focusButton" class="secondary-button" type="button">专注预览</button>
-          <button id="exportButton" class="primary-button export-current" type="button">
+          <button id="exportButton" class="primary-button export-current" type="button" disabled>
             导出当前 PNG
           </button>
           <button id="exportAllButton" class="secondary-button export-all" type="button" hidden>
@@ -138,25 +139,25 @@
         <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
 
         <footer class="controls-footer">
-          <span>6.9″ 画布</span>
-          <strong>1320 × 2868 px</strong>
+          <span>iPad 横屏画布</span>
+          <strong>2732 × 2048 px</strong>
           <span id="zoomLabel" class="zoom-label"></span>
         </footer>
       </aside>
 
-      <main id="stage" class="stage" aria-label="iPhone 宣传图预览区域">
+      <main id="stage" class="stage" aria-label="iPad 宣传图预览区域">
         <div id="canvasShell" class="canvas-shell">
-          <article id="artboard" class="artboard" aria-label="iPhone App Store 宣传图画布">
+          <article id="artboard" class="artboard" aria-label="iPad App Store 宣传图画布">
             <header class="poster-copy">
               <h2 id="posterTitle"></h2>
               <p id="posterSubtitle"></p>
             </header>
 
-            <div id="device" class="device" aria-label="iPhone 预览">
+            <div id="device" class="device" aria-label="iPad 预览">
               <div id="deviceScreen" class="device-screen">
-                <img id="screenshotImage" crossorigin="anonymous" alt="应用截图" />
-                <div id="screenPlaceholder" class="screen-placeholder" hidden>
-                  <span>上传 iPhone 截图</span>
+                <img id="screenshotImage" crossorigin="anonymous" alt="应用截图" hidden />
+                <div id="screenPlaceholder" class="screen-placeholder">
+                  <span>上传 iPad 横屏截图</span>
                 </div>
               </div>
               <img id="frameImage" class="frame-image" alt="" />

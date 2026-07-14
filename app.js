@@ -1,89 +1,225 @@
-const ARTBOARD = Object.freeze({ width: 1320, height: 2868 });
-
-const MODEL_GEOMETRY = Object.freeze({
-  "iphone-17-pro-max": {
-    frameWidth: 1470,
-    frameHeight: 3000,
-    screenX: 75,
-    screenY: 66,
-    screenWidth: 1320,
-    screenHeight: 2868,
-    screenRadius: 166,
+const PRODUCT_CONFIGS = Object.freeze({
+  iphone: {
+    artboard: { width: 1320, height: 2868 },
+    background: "#fdfdfc",
+    screenshotAspectRatio: "1320 / 2868",
+    geometry: {
+      "iphone-17-pro-max": {
+        frameWidth: 1470,
+        frameHeight: 3000,
+        screenX: 75,
+        screenY: 66,
+        screenWidth: 1320,
+        screenHeight: 2868,
+        screenRadius: 166,
+      },
+      "iphone-17-pro": {
+        frameWidth: 1350,
+        frameHeight: 2760,
+        screenX: 72,
+        screenY: 69,
+        screenWidth: 1206,
+        screenHeight: 2622,
+        screenRadius: 152,
+      },
+      "iphone-17": {
+        frameWidth: 1350,
+        frameHeight: 2760,
+        screenX: 72,
+        screenY: 69,
+        screenWidth: 1206,
+        screenHeight: 2622,
+        screenRadius: 152,
+      },
+      "iphone-air": {
+        frameWidth: 1380,
+        frameHeight: 2880,
+        screenX: 60,
+        screenY: 72,
+        screenWidth: 1260,
+        screenHeight: 2736,
+        screenRadius: 158,
+      },
+    },
+    frameGroups: [
+      {
+        label: "iPhone 17 Pro Max",
+        model: "iphone-17-pro-max",
+        folder: "iPhone 17 Pro Max",
+        orientation: "Portrait",
+        colors: [
+          ["cosmic-orange", "星宇橙", "Cosmic Orange"],
+          ["deep-blue", "深蓝色", "Deep Blue"],
+          ["silver", "银色", "Silver"],
+        ],
+      },
+      {
+        label: "iPhone 17 Pro",
+        model: "iphone-17-pro",
+        folder: "iPhone 17 Pro",
+        orientation: "Portrait",
+        colors: [
+          ["cosmic-orange", "星宇橙", "Cosmic Orange"],
+          ["deep-blue", "深蓝色", "Deep Blue"],
+          ["silver", "银色", "Silver"],
+        ],
+      },
+      {
+        label: "iPhone 17",
+        model: "iphone-17",
+        folder: "iPhone 17",
+        orientation: "Portrait",
+        colors: [
+          ["black", "黑色", "Black"],
+          ["lavender", "薰衣草紫", "Lavender"],
+          ["mist-blue", "雾蓝色", "Mist Blue"],
+          ["sage", "鼠尾草绿", "Sage"],
+          ["white", "白色", "White"],
+        ],
+      },
+      {
+        label: "iPhone Air",
+        model: "iphone-air",
+        folder: "iPhone Air",
+        orientation: "Portrait",
+        colors: [
+          ["cloud-white", "云白色", "Cloud White"],
+          ["light-gold", "浅金色", "Light Gold"],
+          ["sky-blue", "天蓝色", "Sky Blue"],
+          ["space-black", "深空黑色", "Space Black"],
+        ],
+      },
+    ],
+    defaults: {
+      title: "不只是背单词，\n更要真正掌握语言",
+      subtitle: "发音、释义、例句、备注，一张卡片完\n成一次有效学习。",
+      frame: "iphone-17-black",
+      screenshot: "./assets/sample-screenshot.png",
+      screenshotName: "示例截图",
+      fit: "cover",
+      deviceWidth: 930,
+      deviceTop: 730,
+    },
+    layout: {
+      deviceWidth: { min: 760, max: 1120, step: 2 },
+      deviceTop: { min: 500, max: 900, step: 2 },
+    },
+    copy: {
+      top: 130,
+      side: 82,
+      gap: 60,
+      title: {
+        fontFamily: '"PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 112,
+        fontWeight: 750,
+        lineHeight: 1.04,
+        letterSpacing: -5,
+      },
+      subtitle: {
+        fontFamily: '"Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif',
+        fontSize: 60,
+        fontWeight: 400,
+        lineHeight: 1.4,
+        letterSpacing: 2,
+      },
+    },
+    frameLoadLabel: "iPhone 机框",
+    exportPrefix: "launchframe",
   },
-  "iphone-17-pro": {
-    frameWidth: 1350,
-    frameHeight: 2760,
-    screenX: 72,
-    screenY: 69,
-    screenWidth: 1206,
-    screenHeight: 2622,
-    screenRadius: 152,
-  },
-  "iphone-17": {
-    frameWidth: 1350,
-    frameHeight: 2760,
-    screenX: 72,
-    screenY: 69,
-    screenWidth: 1206,
-    screenHeight: 2622,
-    screenRadius: 152,
-  },
-  "iphone-air": {
-    frameWidth: 1380,
-    frameHeight: 2880,
-    screenX: 60,
-    screenY: 72,
-    screenWidth: 1260,
-    screenHeight: 2736,
-    screenRadius: 158,
+  ipad: {
+    artboard: { width: 2732, height: 2048 },
+    background: "#f2f2f2",
+    screenshotAspectRatio: "4 / 3",
+    geometry: {
+      "ipad-pro-m5-13": {
+        frameWidth: 3000,
+        frameHeight: 2300,
+        screenX: 124,
+        screenY: 118,
+        screenWidth: 2752,
+        screenHeight: 2064,
+        screenRadius: 60,
+      },
+      "ipad-pro-m5-11": {
+        frameWidth: 2640,
+        frameHeight: 1880,
+        screenX: 110,
+        screenY: 106,
+        screenWidth: 2420,
+        screenHeight: 1668,
+        screenRadius: 60,
+      },
+    },
+    frameGroups: [
+      {
+        label: "iPad Pro (M5) 13″",
+        assetName: 'iPad Pro (M5) 13"',
+        model: "ipad-pro-m5-13",
+        folder: "iPad Pro (M5)",
+        orientation: "Landscape",
+        colors: [
+          ["space-black", "深空黑色", "Space Black"],
+          ["silver", "银色", "Silver"],
+        ],
+      },
+      {
+        label: "iPad Pro (M5) 11″",
+        assetName: 'iPad Pro (M5) 11"',
+        model: "ipad-pro-m5-11",
+        folder: "iPad Pro (M5)",
+        orientation: "Landscape",
+        colors: [
+          ["space-black", "深空黑色", "Space Black"],
+          ["silver", "银色", "Silver"],
+        ],
+      },
+    ],
+    defaults: {
+      title: "海量词书，掌握你的英语",
+      subtitle: "从入门到进阶，随时随地高效记忆单词",
+      frame: "ipad-pro-m5-11-space-black",
+      screenshot: "./assets/sample-ipad-screenshot.png",
+      screenshotName: "iPad 示例截图",
+      fit: "fill",
+      deviceWidth: 1760,
+      deviceTop: 536,
+    },
+    layout: {
+      deviceWidth: { min: 1500, max: 2200, step: 4 },
+      deviceTop: { min: 460, max: 720, step: 4 },
+    },
+    copy: {
+      top: 215,
+      side: 160,
+      gap: 75,
+      title: {
+        fontFamily: '"PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 74,
+        fontWeight: 700,
+        lineHeight: 1.1,
+        letterSpacing: -5,
+      },
+      subtitle: {
+        fontFamily: '"PingFang SC", "SF Pro Text", "Helvetica Neue", Arial, sans-serif',
+        fontSize: 56,
+        fontWeight: 400,
+        lineHeight: 1.35,
+        letterSpacing: 2,
+      },
+    },
+    frameLoadLabel: "iPad 机框",
+    exportPrefix: "launchframe-ipad",
   },
 });
 
-const FRAME_GROUPS = [
-  {
-    label: "iPhone 17 Pro Max",
-    model: "iphone-17-pro-max",
-    folder: "iPhone 17 Pro Max",
-    colors: [
-      ["cosmic-orange", "星宇橙", "Cosmic Orange"],
-      ["deep-blue", "深蓝色", "Deep Blue"],
-      ["silver", "银色", "Silver"],
-    ],
-  },
-  {
-    label: "iPhone 17 Pro",
-    model: "iphone-17-pro",
-    folder: "iPhone 17 Pro",
-    colors: [
-      ["cosmic-orange", "星宇橙", "Cosmic Orange"],
-      ["deep-blue", "深蓝色", "Deep Blue"],
-      ["silver", "银色", "Silver"],
-    ],
-  },
-  {
-    label: "iPhone 17",
-    model: "iphone-17",
-    folder: "iPhone 17",
-    colors: [
-      ["black", "黑色", "Black"],
-      ["lavender", "薰衣草紫", "Lavender"],
-      ["mist-blue", "雾蓝色", "Mist Blue"],
-      ["sage", "鼠尾草绿", "Sage"],
-      ["white", "白色", "White"],
-    ],
-  },
-  {
-    label: "iPhone Air",
-    model: "iphone-air",
-    folder: "iPhone Air",
-    colors: [
-      ["cloud-white", "云白色", "Cloud White"],
-      ["light-gold", "浅金色", "Light Gold"],
-      ["sky-blue", "天蓝色", "Sky Blue"],
-      ["space-black", "深空黑色", "Space Black"],
-    ],
-  },
-];
+const requestedProductKey = document.body.dataset.product;
+const productKey = PRODUCT_CONFIGS[requestedProductKey] ? requestedProductKey : "iphone";
+const PRODUCT = PRODUCT_CONFIGS[productKey];
+document.body.dataset.product = productKey;
+const ARTBOARD = Object.freeze(PRODUCT.artboard);
+const MODEL_GEOMETRY = Object.freeze(PRODUCT.geometry);
+const FRAME_GROUPS = PRODUCT.frameGroups;
+const DEFAULTS = Object.freeze(PRODUCT.defaults);
 
 const FRAMES = FRAME_GROUPS.flatMap((group) =>
   group.colors.map(([colorId, colorLabel, fileColor]) => ({
@@ -91,19 +227,10 @@ const FRAMES = FRAME_GROUPS.flatMap((group) =>
     groupLabel: group.label,
     label: `${group.label} · ${colorLabel}`,
     model: group.model,
-    src: `./assets/frames/${group.folder}/${group.label} - ${fileColor} - Portrait.png`,
+    colorId,
+    src: `./assets/frames/${group.folder}/${group.assetName ?? group.label} - ${fileColor} - ${group.orientation}.png`,
   })),
 );
-
-const DEFAULTS = Object.freeze({
-  title: "不只是背单词，\n更要真正掌握语言",
-  subtitle: "发音、释义、例句、备注，一张卡片完\n成一次有效学习。",
-  frame: "iphone-17-black",
-  screenshot: "./assets/sample-screenshot.png",
-  fit: "cover",
-  deviceWidth: 930,
-  deviceTop: 730,
-});
 
 const MAX_SCREENSHOTS = 10;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -149,6 +276,40 @@ const elements = {
   zoomLabel: document.querySelector("#zoomLabel"),
 };
 
+function applyProductConfiguration() {
+  const rootStyle = document.documentElement.style;
+  const copy = PRODUCT.copy;
+
+  rootStyle.setProperty("--artboard-width", `${ARTBOARD.width}px`);
+  rootStyle.setProperty("--artboard-height", `${ARTBOARD.height}px`);
+  rootStyle.setProperty("--poster-background", PRODUCT.background);
+  rootStyle.setProperty("--screenshot-aspect-ratio", PRODUCT.screenshotAspectRatio);
+  rootStyle.setProperty("--copy-top", `${copy.top}px`);
+  rootStyle.setProperty("--copy-side", `${copy.side}px`);
+  rootStyle.setProperty("--copy-width", `${ARTBOARD.width - copy.side * 2}px`);
+  rootStyle.setProperty("--copy-gap", `${copy.gap}px`);
+  rootStyle.setProperty("--title-font-family", copy.title.fontFamily);
+  rootStyle.setProperty("--title-font-size", `${copy.title.fontSize}px`);
+  rootStyle.setProperty("--title-font-weight", String(copy.title.fontWeight));
+  rootStyle.setProperty("--title-line-height", String(copy.title.lineHeight));
+  rootStyle.setProperty("--title-letter-spacing", `${copy.title.letterSpacing}px`);
+  rootStyle.setProperty("--subtitle-font-family", copy.subtitle.fontFamily);
+  rootStyle.setProperty("--subtitle-font-size", `${copy.subtitle.fontSize}px`);
+  rootStyle.setProperty("--subtitle-font-weight", String(copy.subtitle.fontWeight));
+  rootStyle.setProperty("--subtitle-line-height", String(copy.subtitle.lineHeight));
+  rootStyle.setProperty("--subtitle-letter-spacing", `${copy.subtitle.letterSpacing}px`);
+  rootStyle.setProperty("--device-default-width", `${DEFAULTS.deviceWidth}px`);
+
+  for (const [input, range] of [
+    [elements.deviceWidthInput, PRODUCT.layout.deviceWidth],
+    [elements.deviceTopInput, PRODUCT.layout.deviceTop],
+  ]) {
+    input.min = String(range.min);
+    input.max = String(range.max);
+    input.step = String(range.step);
+  }
+}
+
 const params = new URLSearchParams(window.location.search);
 const isRenderMode = params.get("render") === "1";
 let nextPageId = 1;
@@ -161,6 +322,9 @@ function createPage({
   screenshot,
   screenshotName,
   fit,
+  imageWidth = null,
+  imageHeight = null,
+  autoMatchFrame = false,
   objectUrl = null,
   isSample = false,
 }) {
@@ -171,6 +335,9 @@ function createPage({
     screenshot,
     screenshotName,
     fit,
+    imageWidth,
+    imageHeight,
+    autoMatchFrame,
     objectUrl,
     isSample,
   };
@@ -181,25 +348,38 @@ function createDefaultPage() {
     title: DEFAULTS.title,
     subtitle: DEFAULTS.subtitle,
     screenshot: DEFAULTS.screenshot,
-    screenshotName: "示例截图",
+    screenshotName: DEFAULTS.screenshotName,
     fit: DEFAULTS.fit,
     isSample: true,
   });
 }
 
+const screenshotParam = params.get("screenshot");
+const hasScreenshotParam = screenshotParam !== null && screenshotParam.trim() !== "";
 const initialPage = createPage({
   title: params.get("title") ?? DEFAULTS.title,
   subtitle: params.get("subtitle") ?? DEFAULTS.subtitle,
-  screenshot: params.get("screenshot") ?? DEFAULTS.screenshot,
-  screenshotName: params.has("screenshot") ? "URL 截图" : "示例截图",
-  fit: params.get("fit") ?? DEFAULTS.fit,
-  isSample: !params.has("screenshot"),
+  screenshot: hasScreenshotParam ? screenshotParam : DEFAULTS.screenshot,
+  screenshotName: hasScreenshotParam ? "URL 截图" : DEFAULTS.screenshotName,
+  fit: normalizeFitMode(params.get("fit") ?? DEFAULTS.fit),
+  autoMatchFrame: productKey === "ipad" && hasScreenshotParam && !params.has("frame"),
+  isSample: !hasScreenshotParam,
 });
 
 const state = {
   frame: params.get("frame") ?? DEFAULTS.frame,
-  deviceWidth: getNumericParam("deviceWidth", DEFAULTS.deviceWidth, 760, 1120),
-  deviceTop: getNumericParam("deviceTop", DEFAULTS.deviceTop, 500, 900),
+  deviceWidth: getNumericParam(
+    "deviceWidth",
+    DEFAULTS.deviceWidth,
+    PRODUCT.layout.deviceWidth.min,
+    PRODUCT.layout.deviceWidth.max,
+  ),
+  deviceTop: getNumericParam(
+    "deviceTop",
+    DEFAULTS.deviceTop,
+    PRODUCT.layout.deviceTop.min,
+    PRODUCT.layout.deviceTop.max,
+  ),
   pages: [initialPage],
   activePageId: initialPage.id,
 };
@@ -215,6 +395,37 @@ function getNumericParam(name, fallback, min, max) {
 
 function toPercent(value, whole) {
   return `${((value / whole) * 100).toFixed(6)}%`;
+}
+
+function normalizeFitMode(fit) {
+  const availableModes =
+    productKey === "ipad" ? ["fill", "cover", "contain"] : ["cover", "contain"];
+  return availableModes.includes(fit) ? fit : DEFAULTS.fit;
+}
+
+function getClosestFrameIdForImage(width, height, currentFrameId = state.frame) {
+  if (productKey !== "ipad" || !width || !height) return currentFrameId;
+
+  const screenshotRatio = width / height;
+  const currentFrame = FRAMES.find((frame) => frame.id === currentFrameId) ?? FRAMES[0];
+  const models = [...new Set(FRAMES.map((frame) => frame.model))];
+  const closestModel = models.reduce((bestModel, model) => {
+    const geometry = MODEL_GEOMETRY[model];
+    const bestGeometry = MODEL_GEOMETRY[bestModel];
+    const score = Math.abs(
+      Math.log(geometry.screenWidth / geometry.screenHeight / screenshotRatio),
+    );
+    const bestScore = Math.abs(
+      Math.log(bestGeometry.screenWidth / bestGeometry.screenHeight / screenshotRatio),
+    );
+    return score < bestScore ? model : bestModel;
+  });
+
+  return (
+    FRAMES.find(
+      (frame) => frame.model === closestModel && frame.colorId === currentFrame.colorId,
+    )?.id ?? FRAMES.find((frame) => frame.model === closestModel)?.id ?? currentFrameId
+  );
 }
 
 function getActivePage() {
@@ -284,14 +495,27 @@ function applyText(page = getActivePage()) {
 function applyScreenshot(page = getActivePage()) {
   const pageId = page.id;
 
+  elements.screenshotImage.onload = null;
+  elements.screenshotImage.onerror = null;
+  elements.screenshotImage.removeAttribute("src");
   elements.screenshotImage.hidden = true;
   elements.screenPlaceholder.hidden = false;
   elements.screenshotImage.style.objectFit = page.fit;
   elements.fitSelect.value = page.fit;
   elements.screenshotName.textContent = `当前：${page.screenshotName}`;
 
+  if (!page.screenshot) return;
+
   elements.screenshotImage.onload = () => {
     if (getActivePage().id !== pageId) return;
+    page.imageWidth = elements.screenshotImage.naturalWidth;
+    page.imageHeight = elements.screenshotImage.naturalHeight;
+
+    if (page.autoMatchFrame) {
+      page.autoMatchFrame = false;
+      applyFrame(getClosestFrameIdForImage(page.imageWidth, page.imageHeight));
+    }
+
     elements.screenshotImage.hidden = false;
     elements.screenPlaceholder.hidden = true;
   };
@@ -333,10 +557,18 @@ function renderScreenshotList() {
       `第 ${index + 1} 张，${page.screenshotName}${isActive ? "，当前宣传图" : ""}`,
     );
 
-    const thumbnail = document.createElement("img");
-    thumbnail.alt = "";
-    thumbnail.crossOrigin = "anonymous";
-    thumbnail.src = page.screenshot;
+    const thumbnail = page.screenshot
+      ? document.createElement("img")
+      : document.createElement("span");
+    thumbnail.setAttribute("aria-hidden", "true");
+
+    if (page.screenshot) {
+      thumbnail.alt = "";
+      thumbnail.crossOrigin = "anonymous";
+      thumbnail.src = page.screenshot;
+    } else {
+      thumbnail.className = "screenshot-card-placeholder";
+    }
 
     const pageNumber = document.createElement("span");
     pageNumber.className = "screenshot-card-index";
@@ -361,6 +593,8 @@ function updatePageControls() {
   const isLocked = isImporting || isExporting;
   const hasMultiplePages = pageCount > 1;
   const isDefaultOnly = pageCount === 1 && state.pages[0].isSample;
+  const hasActiveScreenshot = Boolean(getActivePage().screenshot);
+  const hasCompleteScreenshotSet = state.pages.every((page) => Boolean(page.screenshot));
 
   elements.pagePosition.value = `${activeIndex + 1} / ${pageCount}`;
   elements.moveScreenshotPrevious.disabled = isLocked || activeIndex <= 0;
@@ -380,8 +614,8 @@ function updatePageControls() {
   elements.deviceTopInput.disabled = isLocked;
   elements.resetButton.disabled = isLocked;
   elements.focusButton.disabled = isLocked;
-  elements.exportButton.disabled = isLocked;
-  elements.exportAllButton.disabled = isLocked;
+  elements.exportButton.disabled = isLocked || !hasActiveScreenshot;
+  elements.exportAllButton.disabled = isLocked || !hasCompleteScreenshotSet;
 
   elements.exportAllButton.hidden = !hasMultiplePages;
   elements.multiDownloadHint.hidden = !hasMultiplePages;
@@ -467,6 +701,11 @@ function roundedRectPath(context, x, y, width, height, radius) {
 }
 
 function drawImageWithFit(context, image, x, y, width, height, fit) {
+  if (fit === "fill") {
+    context.drawImage(image, x, y, width, height);
+    return;
+  }
+
   const scale =
     fit === "contain"
       ? Math.min(width / image.naturalWidth, height / image.naturalHeight)
@@ -614,6 +853,7 @@ function drawDeviceShadow(context, x, y, width, height) {
 function drawPoster(context, snapshot, screenshotImage, frameImage) {
   const frame = FRAMES.find((item) => item.id === snapshot.frame) ?? FRAMES[0];
   const geometry = MODEL_GEOMETRY[frame.model];
+  const copy = PRODUCT.copy;
   const deviceScale = snapshot.deviceWidth / geometry.frameWidth;
   const deviceHeight = geometry.frameHeight * deviceScale;
   const deviceX = (ARTBOARD.width - snapshot.deviceWidth) / 2;
@@ -622,7 +862,7 @@ function drawPoster(context, snapshot, screenshotImage, frameImage) {
   const screenWidth = geometry.screenWidth * deviceScale;
   const screenHeight = geometry.screenHeight * deviceScale;
 
-  context.fillStyle = "#fdfdfc";
+  context.fillStyle = PRODUCT.background;
   context.fillRect(0, 0, ARTBOARD.width, ARTBOARD.height);
   drawDeviceShadow(context, deviceX, snapshot.deviceTop, snapshot.deviceWidth, deviceHeight);
 
@@ -659,21 +899,21 @@ function drawPoster(context, snapshot, screenshotImage, frameImage) {
 
   const titleHeight = drawTextBlock(context, {
     lines: snapshot.titleLines,
-    top: 130,
-    font: '750 112px "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
-    fontSize: 112,
-    lineHeight: 112 * 1.04,
-    letterSpacing: -5,
+    top: copy.top,
+    font: `${copy.title.fontWeight} ${copy.title.fontSize}px ${copy.title.fontFamily}`,
+    fontSize: copy.title.fontSize,
+    lineHeight: copy.title.fontSize * copy.title.lineHeight,
+    letterSpacing: copy.title.letterSpacing,
     color: "#050505",
   });
 
   drawTextBlock(context, {
     lines: snapshot.subtitleLines,
-    top: 130 + titleHeight + 60,
-    font: '400 60px "Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif',
-    fontSize: 60,
-    lineHeight: 60 * 1.4,
-    letterSpacing: 2,
+    top: copy.top + titleHeight + copy.gap,
+    font: `${copy.subtitle.fontWeight} ${copy.subtitle.fontSize}px ${copy.subtitle.fontFamily}`,
+    fontSize: copy.subtitle.fontSize,
+    lineHeight: copy.subtitle.fontSize * copy.subtitle.lineHeight,
+    letterSpacing: copy.subtitle.letterSpacing,
     color: "#1b1b1a",
   });
 }
@@ -723,7 +963,7 @@ function sanitizeFileName(fileName) {
 
 function getExportFileName(snapshot) {
   const pageNumber = String(snapshot.pageIndex + 1).padStart(2, "0");
-  return `launchframe-${pageNumber}-${sanitizeFileName(snapshot.screenshotName)}-${ARTBOARD.width}x${ARTBOARD.height}.png`;
+  return `${PRODUCT.exportPrefix}-${pageNumber}-${sanitizeFileName(snapshot.screenshotName)}-${ARTBOARD.width}x${ARTBOARD.height}.png`;
 }
 
 function downloadBlob(blob, fileName) {
@@ -786,8 +1026,11 @@ async function exportPages(pageIds, mode) {
     .map((pageId) => state.pages.find((page) => page.id === pageId))
     .filter(Boolean);
   if (pages.length === 0) return;
+  if (pages.some((page) => !page.screenshot)) {
+    setExportStatus("请先添加要导出的应用截图。", true);
+    return;
+  }
 
-  const snapshots = pages.map(createRenderSnapshot);
   isExporting = true;
   setExportStatus("");
   renderScreenshotList();
@@ -798,8 +1041,9 @@ async function exportPages(pageIds, mode) {
   try {
     await (document.fonts?.ready ?? Promise.resolve());
 
+    const snapshots = pages.map(createRenderSnapshot);
     const selectedFrame = FRAMES.find((item) => item.id === snapshots[0].frame) ?? FRAMES[0];
-    const frameImage = await loadImage(selectedFrame.src, "iPhone 机框");
+    const frameImage = await loadImage(selectedFrame.src, PRODUCT.frameLoadLabel);
     const { canvas, context } = createExportCanvas();
     const downloads = [];
 
@@ -849,13 +1093,15 @@ async function createUploadedPage(file, templatePage) {
   const objectUrl = URL.createObjectURL(file);
 
   try {
-    await loadImage(objectUrl, file.name);
+    const image = await loadImage(objectUrl, file.name);
     return createPage({
       title: templatePage.title,
       subtitle: templatePage.subtitle,
       screenshot: objectUrl,
       screenshotName: file.name,
       fit: templatePage.fit,
+      imageWidth: image.naturalWidth,
+      imageHeight: image.naturalHeight,
       objectUrl,
     });
   } catch (error) {
@@ -888,6 +1134,7 @@ async function importScreenshots(fileList) {
 
   const templatePage = { ...getActivePage() };
   const importedPages = [];
+  let didAutoMatchFrame = false;
 
   try {
     for (const file of files) {
@@ -897,13 +1144,23 @@ async function importScreenshots(fileList) {
     if (isReplacingSample) {
       releaseAllPages();
       state.pages = importedPages;
+
+      if (productKey === "ipad" && !params.has("frame")) {
+        state.frame = getClosestFrameIdForImage(
+          importedPages[0].imageWidth,
+          importedPages[0].imageHeight,
+        );
+        didAutoMatchFrame = true;
+      }
     } else {
       state.pages.push(...importedPages);
     }
 
     state.activePageId = importedPages[0].id;
     applyState();
-    setScreenshotStatus(`已添加 ${importedPages.length} 张截图。`);
+    const matchedFrame = FRAMES.find((frame) => frame.id === state.frame);
+    const frameHint = didAutoMatchFrame ? `，已匹配 ${matchedFrame?.label ?? "iPad 机框"}` : "";
+    setScreenshotStatus(`已添加 ${importedPages.length} 张截图${frameHint}。`);
   } catch (error) {
     importedPages.forEach(releasePage);
     setScreenshotStatus(`未添加：${error.message}`, true);
@@ -1055,6 +1312,7 @@ function bindEvents() {
 
 function initialize() {
   if (isRenderMode) document.body.classList.add("render-mode");
+  applyProductConfiguration();
   populateFrameSelect();
   applyState();
   bindEvents();

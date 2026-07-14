@@ -8,6 +8,23 @@
   text-rendering: geometricPrecision;
   --artboard-width: 1320px;
   --artboard-height: 2868px;
+  --poster-background: #fdfdfc;
+  --screenshot-aspect-ratio: 1320 / 2868;
+  --copy-top: 130px;
+  --copy-side: 82px;
+  --copy-width: 1156px;
+  --title-font-family: "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  --title-font-size: 112px;
+  --title-font-weight: 750;
+  --title-letter-spacing: -5px;
+  --title-line-height: 1.04;
+  --subtitle-font-family: "Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif;
+  --subtitle-font-size: 60px;
+  --subtitle-font-weight: 400;
+  --subtitle-letter-spacing: 2px;
+  --subtitle-line-height: 1.4;
+  --copy-gap: 60px;
+  --device-default-width: 930px;
 }
 
 * {
@@ -116,6 +133,39 @@ input[type="range"],
   color: #aeb1b7;
   font-size: 13px;
   line-height: 1.65;
+}
+
+.product-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 12px;
+  background: #202328;
+}
+
+.product-switcher a {
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  border-radius: 8px;
+  color: #8f939b;
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.product-switcher a:hover {
+  color: #f1f2f3;
+}
+
+.product-switcher a[aria-current="page"] {
+  color: #18191c;
+  background: #f4f0e7;
 }
 
 .control-section {
@@ -276,13 +326,23 @@ input[type="range"],
   background: #22252a;
 }
 
-.screenshot-card img {
+.screenshot-card img,
+.screenshot-card-placeholder {
   display: block;
   width: 100%;
-  aspect-ratio: 1320 / 2868;
+  aspect-ratio: var(--screenshot-aspect-ratio);
   border-radius: 6px;
-  object-fit: cover;
   background: #34373d;
+}
+
+.screenshot-card img {
+  object-fit: cover;
+}
+
+.screenshot-card-placeholder {
+  background:
+    linear-gradient(135deg, rgb(255 255 255 / 8%), transparent 55%),
+    #34373d;
 }
 
 .screenshot-card[aria-current="true"] {
@@ -390,7 +450,7 @@ input[type="range"],
 }
 
 .controls-actions button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.58;
 }
 
@@ -446,6 +506,7 @@ input[type="range"],
 
 button:focus-visible,
 .screenshot-card:focus-visible,
+.product-switcher a:focus-visible,
 #screenshotInput:focus-visible + .screenshot-add-button {
   outline: 2px solid #f4efe4;
   outline-offset: 2px;
@@ -502,7 +563,7 @@ button:focus-visible,
   height: var(--artboard-height);
   overflow: hidden;
   color: #080808;
-  background: #fdfdfc;
+  background: var(--poster-background);
   transform-origin: left top;
   -webkit-font-smoothing: antialiased;
 }
@@ -510,32 +571,30 @@ button:focus-visible,
 .poster-copy {
   position: absolute;
   z-index: 5;
-  top: 130px;
-  right: 82px;
-  left: 82px;
+  top: var(--copy-top);
+  right: var(--copy-side);
+  left: var(--copy-side);
   text-align: center;
 }
 
 .poster-copy h2 {
   color: #050505;
-  font-family:
-    "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
-  font-size: 112px;
-  font-weight: 750;
-  letter-spacing: -5px;
-  line-height: 1.04;
+  font-family: var(--title-font-family);
+  font-size: var(--title-font-size);
+  font-weight: var(--title-font-weight);
+  letter-spacing: var(--title-letter-spacing);
+  line-height: var(--title-line-height);
   white-space: pre-line;
 }
 
 .poster-copy p {
-  margin-top: 60px;
+  margin-top: var(--copy-gap);
   color: #1b1b1a;
-  font-family:
-    "Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif;
-  font-size: 60px;
-  font-weight: 400;
-  letter-spacing: 2px;
-  line-height: 1.4;
+  font-family: var(--subtitle-font-family);
+  font-size: var(--subtitle-font-size);
+  font-weight: var(--subtitle-font-weight);
+  letter-spacing: var(--subtitle-letter-spacing);
+  line-height: var(--subtitle-line-height);
   white-space: pre-line;
 }
 
@@ -545,7 +604,7 @@ button:focus-visible,
   top: 0;
   right: auto;
   left: -10000px;
-  width: calc(var(--artboard-width) - 164px);
+  width: var(--copy-width);
   opacity: 0;
   pointer-events: none;
 }
@@ -554,7 +613,7 @@ button:focus-visible,
   position: absolute;
   z-index: 2;
   left: 50%;
-  width: 930px;
+  width: var(--device-default-width);
   isolation: isolate;
   transform: translateX(-50%);
 }
@@ -633,7 +692,7 @@ body.render-mode {
   width: var(--artboard-width);
   height: var(--artboard-height);
   overflow: hidden;
-  background: #fdfdfc;
+  background: var(--poster-background);
 }
 
 body.render-mode .workspace {

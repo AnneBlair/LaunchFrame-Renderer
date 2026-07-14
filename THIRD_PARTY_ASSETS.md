@@ -15,12 +15,18 @@ Before using or redistributing them, review the applicable terms from the asset
 source and Apple's current marketing and trademark guidelines. Replace or
 remove the files if your use is not permitted.
 
+The iPad Pro (M5) frame files were supplied to this repository as local assets;
+no upstream license file or redistribution grant accompanies them. Treat them
+as unlicensed third-party artwork unless you can independently confirm the
+source and applicable permission.
+
 ## Demo screenshot and preview
 
-`assets/sample-screenshot.png` and `docs/preview.jpg` are demonstration assets.
-They may contain application UI, device artwork, logos, or other material owned
-by their respective rights holders. They are not licensed under the MIT
-License unless the relevant rights holder states otherwise.
+`assets/sample-screenshot.png`, `assets/sample-ipad-screenshot.png`, and
+`docs/preview.jpg` are demonstration assets. They may contain application UI,
+device artwork, logos, or other material owned by their respective rights
+holders. They are not licensed under the MIT License unless the relevant rights
+holder states otherwise.
 
-Apple, iPhone, and App Store are trademarks of Apple Inc. This project is not
+Apple, iPhone, iPad, and App Store are trademarks of Apple Inc. This project is not
 affiliated with or endorsed by Apple Inc.
