@@ -19,12 +19,54 @@
         </header>
 
         <p class="intro">
-          第一版竖版模板。修改文案、替换 iOS 截图或切换原机框，右侧会实时渲染。
+          添加一组 iOS 截图，逐张编辑文案并导出对应的 App Store 宣传图。
         </p>
+
+        <section class="control-section" aria-labelledby="screenshots-heading">
+          <div class="section-heading">
+            <span class="section-index">01</span>
+            <h2 id="screenshots-heading">截图组</h2>
+            <output id="pagePosition" class="page-position" aria-live="polite">1 / 1</output>
+          </div>
+
+          <div class="screenshot-add-row">
+            <input
+              id="screenshotInput"
+              class="visually-hidden"
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/webp"
+              aria-describedby="screenshotHelp"
+            />
+            <label id="screenshotAddButton" class="upload-button screenshot-add-button" for="screenshotInput">
+              ＋ 添加截图
+            </label>
+            <small id="screenshotHelp">可继续追加，最多 10 张</small>
+          </div>
+
+          <ol id="screenshotList" class="screenshot-list" aria-label="宣传图顺序"></ol>
+          <p id="screenshotName" class="current-screenshot-name"></p>
+
+          <div class="screenshot-order-actions" role="group" aria-label="当前截图操作">
+            <button id="moveScreenshotPrevious" class="secondary-button" type="button">← 前移</button>
+            <button id="moveScreenshotNext" class="secondary-button" type="button">后移 →</button>
+            <button id="deleteScreenshot" class="danger-button" type="button">删除</button>
+          </div>
+
+          <label class="field" for="fitSelect">
+            <span>当前截图填充方式</span>
+            <select id="fitSelect">
+              <option value="cover">铺满屏幕</option>
+              <option value="contain">完整显示</option>
+            </select>
+          </label>
+
+          <p id="screenshotStatus" class="screenshot-status" role="status" aria-live="polite"></p>
+        </section>
 
         <section class="control-section" aria-labelledby="content-heading">
           <div class="section-heading">
-            <span class="section-index">01</span>
+            <span class="section-index">02</span>
             <h2 id="content-heading">文案</h2>
           </div>
 
@@ -41,41 +83,19 @@
 
         <section class="control-section" aria-labelledby="device-heading">
           <div class="section-heading">
-            <span class="section-index">02</span>
-            <h2 id="device-heading">设备与截图</h2>
+            <span class="section-index">03</span>
+            <h2 id="device-heading">设备</h2>
           </div>
 
           <label class="field" for="frameSelect">
             <span>iPhone 原机框</span>
             <select id="frameSelect"></select>
           </label>
-
-          <div class="field">
-            <span>iOS 截图</span>
-            <input
-              id="screenshotInput"
-              class="visually-hidden"
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-            />
-            <label class="upload-button" for="screenshotInput">
-              <span>选择截图</span>
-              <small id="screenshotName">当前使用示例截图</small>
-            </label>
-          </div>
-
-          <label class="field" for="fitSelect">
-            <span>截图填充方式</span>
-            <select id="fitSelect">
-              <option value="cover">铺满屏幕</option>
-              <option value="contain">完整显示</option>
-            </select>
-          </label>
         </section>
 
         <section class="control-section" aria-labelledby="layout-heading">
           <div class="section-heading">
-            <span class="section-index">03</span>
+            <span class="section-index">04</span>
             <h2 id="layout-heading">构图微调</h2>
           </div>
 
@@ -96,14 +116,20 @@
           </label>
         </section>
 
-        <div class="controls-actions">
+        <div id="controlsActions" class="controls-actions">
           <button id="resetButton" class="secondary-button" type="button">恢复默认</button>
           <button id="focusButton" class="secondary-button" type="button">专注预览</button>
-          <button id="exportButton" class="primary-button export-button" type="button">
-            导出 PNG 图片
+          <button id="exportButton" class="primary-button export-current" type="button">
+            导出当前 PNG
+          </button>
+          <button id="exportAllButton" class="secondary-button export-all" type="button" hidden>
+            导出全部（1）
           </button>
         </div>
 
+        <p id="multiDownloadHint" class="download-hint" hidden>
+          将逐张下载多个 PNG；浏览器可能询问是否允许多个下载。
+        </p>
         <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
 
         <footer class="controls-footer">
@@ -133,6 +159,11 @@
           </article>
         </div>
       </main>
+    </div>
+
+    <div class="poster-copy export-text-measure" aria-hidden="true">
+      <h2 id="exportMeasureTitle"></h2>
+      <p id="exportMeasureSubtitle"></p>
     </div>
 
     <script src="./app.js"></script>

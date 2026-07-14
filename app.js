@@ -105,8 +105,12 @@ const DEFAULTS = Object.freeze({
   deviceTop: 730,
 });
 
+const MAX_SCREENSHOTS = 10;
+const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
 const elements = {
   controls: document.querySelector(".controls"),
+  controlsActions: document.querySelector("#controlsActions"),
   artboard: document.querySelector("#artboard"),
   canvasShell: document.querySelector("#canvasShell"),
   stage: document.querySelector("#stage"),
@@ -119,8 +123,15 @@ const elements = {
   device: document.querySelector("#device"),
   deviceScreen: document.querySelector("#deviceScreen"),
   screenshotInput: document.querySelector("#screenshotInput"),
+  screenshotAddButton: document.querySelector("#screenshotAddButton"),
+  screenshotList: document.querySelector("#screenshotList"),
   screenshotImage: document.querySelector("#screenshotImage"),
   screenshotName: document.querySelector("#screenshotName"),
+  screenshotStatus: document.querySelector("#screenshotStatus"),
+  pagePosition: document.querySelector("#pagePosition"),
+  moveScreenshotPrevious: document.querySelector("#moveScreenshotPrevious"),
+  moveScreenshotNext: document.querySelector("#moveScreenshotNext"),
+  deleteScreenshot: document.querySelector("#deleteScreenshot"),
   screenPlaceholder: document.querySelector("#screenPlaceholder"),
   fitSelect: document.querySelector("#fitSelect"),
   deviceWidthInput: document.querySelector("#deviceWidthInput"),
@@ -130,23 +141,67 @@ const elements = {
   resetButton: document.querySelector("#resetButton"),
   focusButton: document.querySelector("#focusButton"),
   exportButton: document.querySelector("#exportButton"),
+  exportAllButton: document.querySelector("#exportAllButton"),
   exportStatus: document.querySelector("#exportStatus"),
+  multiDownloadHint: document.querySelector("#multiDownloadHint"),
+  exportMeasureTitle: document.querySelector("#exportMeasureTitle"),
+  exportMeasureSubtitle: document.querySelector("#exportMeasureSubtitle"),
   zoomLabel: document.querySelector("#zoomLabel"),
 };
 
 const params = new URLSearchParams(window.location.search);
 const isRenderMode = params.get("render") === "1";
-let screenshotObjectUrl = null;
+let nextPageId = 1;
+let isImporting = false;
 let isExporting = false;
 
-const state = {
+function createPage({
+  title,
+  subtitle,
+  screenshot,
+  screenshotName,
+  fit,
+  objectUrl = null,
+  isSample = false,
+}) {
+  return {
+    id: `screenshot-${nextPageId++}`,
+    title,
+    subtitle,
+    screenshot,
+    screenshotName,
+    fit,
+    objectUrl,
+    isSample,
+  };
+}
+
+function createDefaultPage() {
+  return createPage({
+    title: DEFAULTS.title,
+    subtitle: DEFAULTS.subtitle,
+    screenshot: DEFAULTS.screenshot,
+    screenshotName: "示例截图",
+    fit: DEFAULTS.fit,
+    isSample: true,
+  });
+}
+
+const initialPage = createPage({
   title: params.get("title") ?? DEFAULTS.title,
   subtitle: params.get("subtitle") ?? DEFAULTS.subtitle,
-  frame: params.get("frame") ?? DEFAULTS.frame,
   screenshot: params.get("screenshot") ?? DEFAULTS.screenshot,
+  screenshotName: params.has("screenshot") ? "URL 截图" : "示例截图",
   fit: params.get("fit") ?? DEFAULTS.fit,
+  isSample: !params.has("screenshot"),
+});
+
+const state = {
+  frame: params.get("frame") ?? DEFAULTS.frame,
   deviceWidth: getNumericParam("deviceWidth", DEFAULTS.deviceWidth, 760, 1120),
   deviceTop: getNumericParam("deviceTop", DEFAULTS.deviceTop, 500, 900),
+  pages: [initialPage],
+  activePageId: initialPage.id,
 };
 
 function getNumericParam(name, fallback, min, max) {
@@ -160,6 +215,27 @@ function getNumericParam(name, fallback, min, max) {
 
 function toPercent(value, whole) {
   return `${((value / whole) * 100).toFixed(6)}%`;
+}
+
+function getActivePage() {
+  return state.pages.find((page) => page.id === state.activePageId) ?? state.pages[0];
+}
+
+function getActivePageIndex() {
+  return state.pages.findIndex((page) => page.id === state.activePageId);
+}
+
+function releasePage(page) {
+  if (page?.objectUrl) URL.revokeObjectURL(page.objectUrl);
+}
+
+function releaseAllPages() {
+  state.pages.forEach(releasePage);
+}
+
+function setScreenshotStatus(message, isError = false) {
+  elements.screenshotStatus.textContent = message;
+  elements.screenshotStatus.classList.toggle("is-error", isError);
 }
 
 function populateFrameSelect() {
@@ -198,19 +274,35 @@ function applyFrame(frameId) {
   )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
 }
 
-function applyText() {
-  elements.titleInput.value = state.title;
-  elements.subtitleInput.value = state.subtitle;
-  elements.posterTitle.textContent = state.title;
-  elements.posterSubtitle.textContent = state.subtitle;
+function applyText(page = getActivePage()) {
+  elements.titleInput.value = page.title;
+  elements.subtitleInput.value = page.subtitle;
+  elements.posterTitle.textContent = page.title;
+  elements.posterSubtitle.textContent = page.subtitle;
 }
 
-function applyScreenshot() {
-  elements.screenshotImage.hidden = false;
-  elements.screenPlaceholder.hidden = true;
-  elements.screenshotImage.src = state.screenshot;
-  elements.screenshotImage.style.objectFit = state.fit;
-  elements.fitSelect.value = state.fit;
+function applyScreenshot(page = getActivePage()) {
+  const pageId = page.id;
+
+  elements.screenshotImage.hidden = true;
+  elements.screenPlaceholder.hidden = false;
+  elements.screenshotImage.style.objectFit = page.fit;
+  elements.fitSelect.value = page.fit;
+  elements.screenshotName.textContent = `当前：${page.screenshotName}`;
+
+  elements.screenshotImage.onload = () => {
+    if (getActivePage().id !== pageId) return;
+    elements.screenshotImage.hidden = false;
+    elements.screenPlaceholder.hidden = true;
+  };
+
+  elements.screenshotImage.onerror = () => {
+    if (getActivePage().id !== pageId) return;
+    elements.screenshotImage.hidden = true;
+    elements.screenPlaceholder.hidden = false;
+  };
+
+  elements.screenshotImage.src = page.screenshot;
 }
 
 function applyLayout() {
@@ -222,11 +314,105 @@ function applyLayout() {
   elements.deviceTopOutput.value = `${state.deviceTop} px`;
 }
 
+function renderScreenshotList() {
+  const fragment = document.createDocumentFragment();
+
+  state.pages.forEach((page, index) => {
+    const listItem = document.createElement("li");
+    listItem.className = "screenshot-item";
+
+    const button = document.createElement("button");
+    const isActive = page.id === state.activePageId;
+    button.className = "screenshot-card";
+    button.type = "button";
+    button.dataset.pageId = page.id;
+    button.disabled = isImporting || isExporting;
+    button.setAttribute("aria-current", String(isActive));
+    button.setAttribute(
+      "aria-label",
+      `第 ${index + 1} 张，${page.screenshotName}${isActive ? "，当前宣传图" : ""}`,
+    );
+
+    const thumbnail = document.createElement("img");
+    thumbnail.alt = "";
+    thumbnail.crossOrigin = "anonymous";
+    thumbnail.src = page.screenshot;
+
+    const pageNumber = document.createElement("span");
+    pageNumber.className = "screenshot-card-index";
+    pageNumber.textContent = String(index + 1).padStart(2, "0");
+
+    const currentBadge = document.createElement("span");
+    currentBadge.className = "screenshot-current-badge";
+    currentBadge.setAttribute("aria-hidden", "true");
+    currentBadge.textContent = "当前";
+
+    button.append(thumbnail, pageNumber, currentBadge);
+    listItem.append(button);
+    fragment.append(listItem);
+  });
+
+  elements.screenshotList.replaceChildren(fragment);
+}
+
+function updatePageControls() {
+  const activeIndex = getActivePageIndex();
+  const pageCount = state.pages.length;
+  const isLocked = isImporting || isExporting;
+  const hasMultiplePages = pageCount > 1;
+  const isDefaultOnly = pageCount === 1 && state.pages[0].isSample;
+
+  elements.pagePosition.value = `${activeIndex + 1} / ${pageCount}`;
+  elements.moveScreenshotPrevious.disabled = isLocked || activeIndex <= 0;
+  elements.moveScreenshotNext.disabled = isLocked || activeIndex >= pageCount - 1;
+  elements.deleteScreenshot.disabled = isLocked || isDefaultOnly;
+  elements.screenshotInput.disabled = isLocked || pageCount >= MAX_SCREENSHOTS;
+  elements.screenshotAddButton.setAttribute(
+    "aria-disabled",
+    String(isLocked || pageCount >= MAX_SCREENSHOTS),
+  );
+
+  elements.titleInput.disabled = isLocked;
+  elements.subtitleInput.disabled = isLocked;
+  elements.frameSelect.disabled = isLocked;
+  elements.fitSelect.disabled = isLocked;
+  elements.deviceWidthInput.disabled = isLocked;
+  elements.deviceTopInput.disabled = isLocked;
+  elements.resetButton.disabled = isLocked;
+  elements.focusButton.disabled = isLocked;
+  elements.exportButton.disabled = isLocked;
+  elements.exportAllButton.disabled = isLocked;
+
+  elements.exportAllButton.hidden = !hasMultiplePages;
+  elements.multiDownloadHint.hidden = !hasMultiplePages;
+  elements.exportAllButton.textContent = `导出全部（${pageCount}）`;
+  elements.controlsActions.classList.toggle("has-multiple", hasMultiplePages);
+}
+
 function applyState() {
   applyText();
   applyFrame(state.frame);
   applyScreenshot();
   applyLayout();
+  renderScreenshotList();
+  updatePageControls();
+}
+
+function selectPage(pageId, { focus = false } = {}) {
+  if (isImporting || isExporting || !state.pages.some((page) => page.id === pageId)) return;
+
+  state.activePageId = pageId;
+  applyText();
+  applyScreenshot();
+  renderScreenshotList();
+  updatePageControls();
+  setExportStatus("");
+
+  if (focus) {
+    elements.screenshotList
+      .querySelector(`[data-page-id="${pageId}"]`)
+      ?.focus({ preventScroll: true });
+  }
 }
 
 function resizePreview() {
@@ -371,6 +557,16 @@ function getRenderedTextLines(element) {
   return lines;
 }
 
+function getPageTextLines(page) {
+  elements.exportMeasureTitle.textContent = page.title;
+  elements.exportMeasureSubtitle.textContent = page.subtitle;
+
+  return {
+    title: getRenderedTextLines(elements.exportMeasureTitle),
+    subtitle: getRenderedTextLines(elements.exportMeasureSubtitle),
+  };
+}
+
 function drawTextBlock(
   context,
   { lines, top, font, fontSize, lineHeight, letterSpacing, color },
@@ -415,20 +611,20 @@ function drawDeviceShadow(context, x, y, width, height) {
   context.restore();
 }
 
-function drawPoster(context) {
-  const frame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
+function drawPoster(context, snapshot, screenshotImage, frameImage) {
+  const frame = FRAMES.find((item) => item.id === snapshot.frame) ?? FRAMES[0];
   const geometry = MODEL_GEOMETRY[frame.model];
-  const deviceScale = state.deviceWidth / geometry.frameWidth;
+  const deviceScale = snapshot.deviceWidth / geometry.frameWidth;
   const deviceHeight = geometry.frameHeight * deviceScale;
-  const deviceX = (ARTBOARD.width - state.deviceWidth) / 2;
+  const deviceX = (ARTBOARD.width - snapshot.deviceWidth) / 2;
   const screenX = deviceX + geometry.screenX * deviceScale;
-  const screenY = state.deviceTop + geometry.screenY * deviceScale;
+  const screenY = snapshot.deviceTop + geometry.screenY * deviceScale;
   const screenWidth = geometry.screenWidth * deviceScale;
   const screenHeight = geometry.screenHeight * deviceScale;
 
   context.fillStyle = "#fdfdfc";
   context.fillRect(0, 0, ARTBOARD.width, ARTBOARD.height);
-  drawDeviceShadow(context, deviceX, state.deviceTop, state.deviceWidth, deviceHeight);
+  drawDeviceShadow(context, deviceX, snapshot.deviceTop, snapshot.deviceWidth, deviceHeight);
 
   context.save();
   roundedRectPath(
@@ -444,25 +640,25 @@ function drawPoster(context) {
   context.fillRect(screenX, screenY, screenWidth, screenHeight);
   drawImageWithFit(
     context,
-    elements.screenshotImage,
+    screenshotImage,
     screenX,
     screenY,
     screenWidth,
     screenHeight,
-    state.fit,
+    snapshot.fit,
   );
   context.restore();
 
   context.drawImage(
-    elements.frameImage,
+    frameImage,
     deviceX,
-    state.deviceTop,
-    state.deviceWidth,
+    snapshot.deviceTop,
+    snapshot.deviceWidth,
     deviceHeight,
   );
 
   const titleHeight = drawTextBlock(context, {
-    lines: getRenderedTextLines(elements.posterTitle),
+    lines: snapshot.titleLines,
     top: 130,
     font: '750 112px "PingFang SC", "SF Pro Display", "Helvetica Neue", Arial, sans-serif',
     fontSize: 112,
@@ -472,7 +668,7 @@ function drawPoster(context) {
   });
 
   drawTextBlock(context, {
-    lines: getRenderedTextLines(elements.posterSubtitle),
+    lines: snapshot.subtitleLines,
     top: 130 + titleHeight + 60,
     font: '400 60px "Songti SC", STSong, "Noto Serif CJK SC", "Times New Roman", serif',
     fontSize: 60,
@@ -498,15 +694,47 @@ function canvasToPngBlob(canvas) {
   });
 }
 
-function downloadBlob(blob) {
+async function loadImage(src, label) {
+  const image = new Image();
+  image.crossOrigin = "anonymous";
+
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error(`${label}无法读取`));
+    image.src = src;
+  });
+
+  await decodeImage(image, label);
+  return image;
+}
+
+function sanitizeFileName(fileName) {
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  return (
+    baseName
+      .normalize("NFKC")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^[-.]+|[-.]+$/g, "")
+      .slice(0, 48) || "screenshot"
+  );
+}
+
+function getExportFileName(snapshot) {
+  const pageNumber = String(snapshot.pageIndex + 1).padStart(2, "0");
+  return `launchframe-${pageNumber}-${sanitizeFileName(snapshot.screenshotName)}-${ARTBOARD.width}x${ARTBOARD.height}.png`;
+}
+
+function downloadBlob(blob, fileName) {
   const downloadUrl = URL.createObjectURL(blob);
   const downloadLink = document.createElement("a");
   downloadLink.href = downloadUrl;
-  downloadLink.download = `launchframe-${ARTBOARD.width}x${ARTBOARD.height}.png`;
+  downloadLink.download = fileName;
   document.body.append(downloadLink);
   downloadLink.click();
   downloadLink.remove();
-  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
 }
 
 function setExportStatus(message, isError = false) {
@@ -514,55 +742,242 @@ function setExportStatus(message, isError = false) {
   elements.exportStatus.classList.toggle("is-error", isError);
 }
 
-async function exportPoster() {
+function createRenderSnapshot(page) {
+  const textLines = getPageTextLines(page);
+
+  return Object.freeze({
+    id: page.id,
+    pageIndex: state.pages.findIndex((item) => item.id === page.id),
+    screenshot: page.screenshot,
+    screenshotName: page.screenshotName,
+    fit: page.fit,
+    frame: state.frame,
+    deviceWidth: state.deviceWidth,
+    deviceTop: state.deviceTop,
+    titleLines: textLines.title,
+    subtitleLines: textLines.subtitle,
+  });
+}
+
+function createExportCanvas() {
+  const canvas = document.createElement("canvas");
+  canvas.width = ARTBOARD.width;
+  canvas.height = ARTBOARD.height;
+
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("当前浏览器不支持图片导出");
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+
+  return { canvas, context };
+}
+
+async function renderSnapshotToBlob(snapshot, canvas, context, frameImage) {
+  const screenshotImage = await loadImage(snapshot.screenshot, snapshot.screenshotName);
+  context.clearRect(0, 0, ARTBOARD.width, ARTBOARD.height);
+  drawPoster(context, snapshot, screenshotImage, frameImage);
+  return canvasToPngBlob(canvas);
+}
+
+async function exportPages(pageIds, mode) {
   if (isExporting) return;
 
+  const pages = pageIds
+    .map((pageId) => state.pages.find((page) => page.id === pageId))
+    .filter(Boolean);
+  if (pages.length === 0) return;
+
+  const snapshots = pages.map(createRenderSnapshot);
   isExporting = true;
-  elements.exportButton.disabled = true;
-  elements.exportButton.textContent = "正在生成 PNG…";
   setExportStatus("");
+  renderScreenshotList();
+  updatePageControls();
+  elements.exportButton.textContent = mode === "all" ? "请稍候…" : "正在生成…";
+  elements.exportAllButton.textContent = "正在生成…";
 
   try {
-    await Promise.all([
-      document.fonts?.ready ?? Promise.resolve(),
-      decodeImage(elements.screenshotImage, "iOS 截图"),
-      decodeImage(elements.frameImage, "iPhone 机框"),
-    ]);
+    await (document.fonts?.ready ?? Promise.resolve());
 
-    const canvas = document.createElement("canvas");
-    canvas.width = ARTBOARD.width;
-    canvas.height = ARTBOARD.height;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("当前浏览器不支持图片导出");
+    const selectedFrame = FRAMES.find((item) => item.id === snapshots[0].frame) ?? FRAMES[0];
+    const frameImage = await loadImage(selectedFrame.src, "iPhone 机框");
+    const { canvas, context } = createExportCanvas();
+    const downloads = [];
 
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    drawPoster(context);
+    for (const [index, snapshot] of snapshots.entries()) {
+      setExportStatus(`正在生成 ${index + 1} / ${snapshots.length}…`);
+      const blob = await renderSnapshotToBlob(snapshot, canvas, context, frameImage);
+      downloads.push({ blob, fileName: getExportFileName(snapshot) });
+    }
 
-    const blob = await canvasToPngBlob(canvas);
-    downloadBlob(blob);
-    setExportStatus(`已生成 ${ARTBOARD.width} × ${ARTBOARD.height} PNG`);
+    downloads.forEach(({ blob, fileName }) => downloadBlob(blob, fileName));
+
+    if (downloads.length === 1) {
+      setExportStatus(`已生成 ${ARTBOARD.width} × ${ARTBOARD.height} PNG`);
+    } else {
+      setExportStatus(
+        `已触发 ${downloads.length} 个 PNG 下载；如未全部下载，请允许浏览器下载多个文件。`,
+      );
+    }
   } catch (error) {
     console.error("PNG export failed", error);
-    setExportStatus("导出失败，请确认截图已加载且允许跨域读取。", true);
+    setExportStatus(`导出失败：${error.message}`, true);
   } finally {
     isExporting = false;
-    elements.exportButton.disabled = false;
-    elements.exportButton.textContent = "导出 PNG 图片";
+    elements.exportButton.textContent = "导出当前 PNG";
+    elements.exportAllButton.textContent = `导出全部（${state.pages.length}）`;
+    renderScreenshotList();
+    updatePageControls();
+  }
+}
+
+function exportCurrentPoster() {
+  return exportPages([state.activePageId], "current");
+}
+
+function exportAllPosters() {
+  return exportPages(
+    state.pages.map((page) => page.id),
+    "all",
+  );
+}
+
+function isSupportedImageFile(file) {
+  return ALLOWED_IMAGE_TYPES.has(file.type) || /\.(?:png|jpe?g|webp)$/i.test(file.name);
+}
+
+async function createUploadedPage(file, templatePage) {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    await loadImage(objectUrl, file.name);
+    return createPage({
+      title: templatePage.title,
+      subtitle: templatePage.subtitle,
+      screenshot: objectUrl,
+      screenshotName: file.name,
+      fit: templatePage.fit,
+      objectUrl,
+    });
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error(`${file.name} 无法读取`);
+  }
+}
+
+async function importScreenshots(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0 || isImporting || isExporting) return;
+
+  const unsupportedFile = files.find((file) => !isSupportedImageFile(file));
+  if (unsupportedFile) {
+    setScreenshotStatus(`未添加：${unsupportedFile.name} 不是支持的图片格式。`, true);
+    return;
+  }
+
+  const isReplacingSample = state.pages.length === 1 && state.pages[0].isSample;
+  const existingCount = isReplacingSample ? 0 : state.pages.length;
+  if (existingCount + files.length > MAX_SCREENSHOTS) {
+    setScreenshotStatus(`未添加：截图组最多 ${MAX_SCREENSHOTS} 张。`, true);
+    return;
+  }
+
+  isImporting = true;
+  setScreenshotStatus(`正在读取 ${files.length} 张截图…`);
+  renderScreenshotList();
+  updatePageControls();
+
+  const templatePage = { ...getActivePage() };
+  const importedPages = [];
+
+  try {
+    for (const file of files) {
+      importedPages.push(await createUploadedPage(file, templatePage));
+    }
+
+    if (isReplacingSample) {
+      releaseAllPages();
+      state.pages = importedPages;
+    } else {
+      state.pages.push(...importedPages);
+    }
+
+    state.activePageId = importedPages[0].id;
+    applyState();
+    setScreenshotStatus(`已添加 ${importedPages.length} 张截图。`);
+  } catch (error) {
+    importedPages.forEach(releasePage);
+    setScreenshotStatus(`未添加：${error.message}`, true);
+  } finally {
+    isImporting = false;
+    renderScreenshotList();
+    updatePageControls();
   }
 }
 
 function resetState() {
-  if (screenshotObjectUrl) {
-    URL.revokeObjectURL(screenshotObjectUrl);
-    screenshotObjectUrl = null;
+  const hasUserScreenshots = state.pages.some((page) => !page.isSample);
+  if (
+    hasUserScreenshots &&
+    !window.confirm("恢复默认会移除已添加的全部截图和文案，是否继续？")
+  ) {
+    return;
   }
 
-  Object.assign(state, DEFAULTS);
+  releaseAllPages();
+  const defaultPage = createDefaultPage();
+  state.frame = DEFAULTS.frame;
+  state.deviceWidth = DEFAULTS.deviceWidth;
+  state.deviceTop = DEFAULTS.deviceTop;
+  state.pages = [defaultPage];
+  state.activePageId = defaultPage.id;
   elements.screenshotInput.value = "";
-  elements.screenshotName.textContent = "当前使用示例截图";
   setExportStatus("");
+  setScreenshotStatus("");
   applyState();
+}
+
+function focusActiveScreenshot() {
+  requestAnimationFrame(() => {
+    elements.screenshotList
+      .querySelector(`[data-page-id="${state.activePageId}"]`)
+      ?.focus({ preventScroll: true });
+  });
+}
+
+function moveActivePage(offset) {
+  if (isImporting || isExporting) return;
+
+  const currentIndex = getActivePageIndex();
+  const targetIndex = currentIndex + offset;
+  if (targetIndex < 0 || targetIndex >= state.pages.length) return;
+
+  const [page] = state.pages.splice(currentIndex, 1);
+  state.pages.splice(targetIndex, 0, page);
+  renderScreenshotList();
+  updatePageControls();
+  setScreenshotStatus(`已将当前截图移至第 ${targetIndex + 1} 张。`);
+  setExportStatus("");
+  focusActiveScreenshot();
+}
+
+function deleteActivePage() {
+  if (isImporting || isExporting) return;
+
+  const currentIndex = getActivePageIndex();
+  const [deletedPage] = state.pages.splice(currentIndex, 1);
+  if (!deletedPage || (deletedPage.isSample && state.pages.length === 0)) {
+    if (deletedPage) state.pages.splice(currentIndex, 0, deletedPage);
+    return;
+  }
+
+  releasePage(deletedPage);
+
+  if (state.pages.length === 0) state.pages.push(createDefaultPage());
+  state.activePageId = state.pages[Math.min(currentIndex, state.pages.length - 1)].id;
+  applyState();
+  setScreenshotStatus(`已删除 ${deletedPage.screenshotName}。`);
+  setExportStatus("");
+  focusActiveScreenshot();
 }
 
 function toggleFocusMode(force) {
@@ -577,13 +992,15 @@ function bindEvents() {
   elements.controls.addEventListener("change", () => setExportStatus(""));
 
   elements.titleInput.addEventListener("input", (event) => {
-    state.title = event.target.value;
-    elements.posterTitle.textContent = state.title;
+    const page = getActivePage();
+    page.title = event.target.value;
+    elements.posterTitle.textContent = page.title;
   });
 
   elements.subtitleInput.addEventListener("input", (event) => {
-    state.subtitle = event.target.value;
-    elements.posterSubtitle.textContent = state.subtitle;
+    const page = getActivePage();
+    page.subtitle = event.target.value;
+    elements.posterSubtitle.textContent = page.subtitle;
   });
 
   elements.frameSelect.addEventListener("change", (event) => {
@@ -591,30 +1008,26 @@ function bindEvents() {
   });
 
   elements.screenshotInput.addEventListener("change", (event) => {
-    const [file] = event.target.files;
-    if (!file) return;
-
-    if (screenshotObjectUrl) URL.revokeObjectURL(screenshotObjectUrl);
-    screenshotObjectUrl = URL.createObjectURL(file);
-    state.screenshot = screenshotObjectUrl;
-    elements.screenshotName.textContent = file.name;
-    applyScreenshot();
-  });
-
-  elements.screenshotImage.addEventListener("load", () => {
-    elements.screenshotImage.hidden = false;
-    elements.screenPlaceholder.hidden = true;
-  });
-
-  elements.screenshotImage.addEventListener("error", () => {
-    elements.screenshotImage.hidden = true;
-    elements.screenPlaceholder.hidden = false;
+    const files = Array.from(event.target.files);
+    event.target.value = "";
+    importScreenshots(files);
   });
 
   elements.fitSelect.addEventListener("change", (event) => {
-    state.fit = event.target.value;
-    elements.screenshotImage.style.objectFit = state.fit;
+    const page = getActivePage();
+    page.fit = event.target.value;
+    elements.screenshotImage.style.objectFit = page.fit;
   });
+
+  elements.screenshotList.addEventListener("click", (event) => {
+    const button = event.target.closest(".screenshot-card");
+    if (!button) return;
+    selectPage(button.dataset.pageId, { focus: true });
+  });
+
+  elements.moveScreenshotPrevious.addEventListener("click", () => moveActivePage(-1));
+  elements.moveScreenshotNext.addEventListener("click", () => moveActivePage(1));
+  elements.deleteScreenshot.addEventListener("click", deleteActivePage);
 
   elements.deviceWidthInput.addEventListener("input", (event) => {
     state.deviceWidth = Number(event.target.value);
@@ -628,9 +1041,11 @@ function bindEvents() {
 
   elements.resetButton.addEventListener("click", resetState);
   elements.focusButton.addEventListener("click", () => toggleFocusMode());
-  elements.exportButton.addEventListener("click", exportPoster);
+  elements.exportButton.addEventListener("click", exportCurrentPoster);
+  elements.exportAllButton.addEventListener("click", exportAllPosters);
 
   window.addEventListener("resize", resizePreview);
+  window.addEventListener("beforeunload", releaseAllPages);
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && document.body.classList.contains("preview-only")) {
       toggleFocusMode(false);

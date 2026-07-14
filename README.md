@@ -1,16 +1,18 @@
 # LaunchFrame Renderer
 
-一个零依赖的 App Store 宣传图 HTML 渲染器。它把 iOS 截图、iPhone 原机框和固定营销文案组合成可预览、可导出 PNG、可自动化截图的 `1320 × 2868` 竖版画布。
+简体中文 | [English](README_EN.md)
+
+一个零依赖的 App Store 宣传图 HTML 渲染器。它把一组 iOS 截图、iPhone 原机框和可编辑营销文案组合成可预览、可导出 PNG、可自动化截图的 `1320 × 2868` 竖版画布；每张输入截图对应一张独立宣传图。
 
 ![LaunchFrame Renderer preview](docs/preview.jpg)
 
 ## 当前能力
 
-- 在浏览器中实时编辑主标题与说明文案
-- 上传 PNG、JPEG 或 WebP 格式的 iOS 截图
+- 一次选择或继续追加最多 10 张 PNG、JPEG 或 WebP 格式的 iOS 截图
+- 每张截图独立编辑主标题、说明文案和填充方式，并支持调整顺序或删除
 - 切换 15 款 iPhone 17、iPhone 17 Pro、iPhone 17 Pro Max 和 iPhone Air 竖版机框
 - 调整手机宽度和垂直位置
-- 一键把当前画布导出为本地 `1320 × 2868` PNG 图片
+- 把当前宣传图导出为本地 `1320 × 2868` PNG，或按页面顺序逐张导出全部 PNG
 - 提供无编辑器的纯渲染模式，便于 Playwright、Puppeteer 或其他浏览器自动化工具截图
 - 不依赖框架、构建工具或第三方 JavaScript 库
 
@@ -30,7 +32,9 @@ python3 -m http.server 4173
 http://localhost:4173/
 ```
 
-页面默认使用 `assets/sample-screenshot.png`，也可以在编辑面板中选择任意本地 iOS 截图。
+页面默认使用 `assets/sample-screenshot.png`。从 Xcode 或 Simulator 获取截图后，可以在编辑面板中一次选择一张或多张本地图片。首批截图会替换示例图；后续还可以继续追加，最多保留 10 张。
+
+点击缩略图可切换当前宣传图。文案和截图填充方式按宣传图分别保存，机框与构图位置由整组共用。可以导出当前 PNG，也可以点击“导出全部”按当前顺序触发多个独立 PNG 下载；不生成 ZIP，浏览器首次批量导出时可能会询问是否允许下载多个文件。
 
 ## 自动化渲染
 
@@ -69,6 +73,10 @@ http://localhost:4173/?render=1&frame=iphone-17-pro-max-deep-blue&deviceTop=730
 ├── index.html
 ├── styles.css
 ├── app.js
+├── README.md
+├── README_EN.md
+├── THIRD_PARTY_ASSETS.md
+├── LICENSE
 ├── assets/
 │   ├── frames/
 │   └── sample-screenshot.png
@@ -81,7 +89,6 @@ http://localhost:4173/?render=1&frame=iphone-17-pro-max-deep-blue&deviceTop=730
 - 模拟器自动启动、导航与截图
 - 多语言文案配置和批量渲染
 - App Store Connect 尺寸预设
-- PNG 批量导出
 
 ## 素材与商标
 
