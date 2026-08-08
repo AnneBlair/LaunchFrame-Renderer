@@ -93,7 +93,7 @@ const PRODUCT_CONFIGS = Object.freeze({
     defaults: {
       title: "不只是背单词，\n更要真正掌握语言",
       subtitle: "发音、释义、例句、备注，一张卡片完\n成一次有效学习。",
-      frame: "iphone-17-black",
+      frame: "iphone-air-cloud-white",
       screenshot: "./assets/sample-screenshot.png",
       screenshotName: "示例截图",
       fit: "cover",
