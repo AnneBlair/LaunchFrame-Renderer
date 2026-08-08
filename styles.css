@@ -9,6 +9,13 @@
   --artboard-width: 1320px;
   --artboard-height: 2868px;
   --poster-background: #fdfdfc;
+  --poster-title-color: #050505;
+  --poster-subtitle-color: #1b1b1a;
+  --poster-accent-color: #3b82f6;
+  --annotation-surface: rgb(18 21 27 / 92%);
+  --annotation-text: #f7f9fc;
+  --composition-shadow-color: rgb(0 0 0 / 25%);
+  --lens-border-color: rgb(255 255 255 / 92%);
   --screenshot-aspect-ratio: 1320 / 2868;
   --copy-top: 130px;
   --copy-side: 82px;
@@ -436,6 +443,220 @@ input[type="range"],
   accent-color: #f3efe7;
 }
 
+.layout-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.layout-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 68px;
+  padding: 7px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 11px;
+  color: #b8bbc1;
+  background: #22252a;
+  text-align: left;
+}
+
+.layout-card:hover {
+  border-color: rgb(255 255 255 / 24%);
+  background: #272a30;
+}
+
+.layout-card[aria-checked="true"] {
+  border-color: #f4efe4;
+  color: #f5f6f7;
+  background: #2c2f35;
+  box-shadow: 0 0 0 1px rgb(244 239 228 / 15%);
+}
+
+.layout-card-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.layout-card-copy strong {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-card-copy small {
+  overflow: hidden;
+  color: #858a94;
+  font-size: 8px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layout-thumbnail {
+  position: relative;
+  width: 32px;
+  height: 52px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 6px;
+  background: #f5f4f1;
+}
+
+.layout-thumbnail-device {
+  position: absolute;
+  display: block;
+  border: 1px solid #262a31;
+  border-radius: 4px;
+  background: linear-gradient(160deg, #c8dbef, #eef3f7);
+  box-shadow: 0 2px 4px rgb(0 0 0 / 18%);
+  transform-origin: center top;
+}
+
+.layout-thumbnail-device.is-card {
+  border-color: rgb(38 42 49 / 42%);
+  border-radius: 3px;
+}
+
+.layout-card-slot-count {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: grid;
+  place-items: center;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 3px;
+  border-radius: 6px;
+  color: #fff;
+  background: rgb(17 20 27 / 82%);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.layout-subsection {
+  display: grid;
+  gap: 9px;
+  padding-top: 2px;
+}
+
+.layout-subsection-label {
+  color: #b7bac0;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.theme-option {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  min-width: 0;
+  padding: 7px 3px 6px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  color: #969aa3;
+  background: transparent;
+  font-size: 8px;
+}
+
+.theme-option[aria-checked="true"] {
+  border-color: #f4efe4;
+  color: #f5f6f7;
+  background: rgb(255 255 255 / 7%);
+}
+
+.theme-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+.slot-assignments,
+.annotation-fields,
+.layout-control-group {
+  display: grid;
+  gap: 12px;
+}
+
+.slot-field {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: #aeb1b7;
+  font-size: 10px;
+}
+
+.slot-field select,
+.annotation-field input {
+  width: 100%;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  outline: none;
+  color: #f5f6f7;
+  background: #22252a;
+  font-size: 10px;
+}
+
+.annotation-field {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  color: #aeb1b7;
+  font-size: 10px;
+}
+
+.toggle-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #b7bac0;
+  font-size: 11px;
+  font-weight: 620;
+}
+
+.toggle-field input {
+  width: 34px;
+  height: 19px;
+  accent-color: #f4efe4;
+}
+
+.layout-hint {
+  min-height: 15px;
+  margin: 0;
+  color: #838791;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.layout-hint.is-error {
+  color: #ffaaa0;
+}
+
+.reset-layout-button {
+  min-height: 36px;
+  border-radius: 9px;
+  font-size: 10px;
+  font-weight: 650;
+}
+
 .controls-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -578,7 +799,7 @@ button:focus-visible,
 }
 
 .poster-copy h2 {
-  color: #050505;
+  color: var(--poster-title-color);
   font-family: var(--title-font-family);
   font-size: var(--title-font-size);
   font-weight: var(--title-font-weight);
@@ -589,7 +810,7 @@ button:focus-visible,
 
 .poster-copy p {
   margin-top: var(--copy-gap);
-  color: #1b1b1a;
+  color: var(--poster-subtitle-color);
   font-family: var(--subtitle-font-family);
   font-size: var(--subtitle-font-size);
   font-weight: var(--subtitle-font-weight);
@@ -616,6 +837,161 @@ button:focus-visible,
   width: var(--device-default-width);
   isolation: isolate;
   transform: translateX(-50%);
+}
+
+.composition-layer {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+}
+
+.composition-device,
+.composition-card {
+  position: absolute;
+  isolation: isolate;
+  transform-origin: center top;
+}
+
+.composition-device::before,
+.composition-card::before {
+  position: absolute;
+  z-index: -2;
+  inset: 3% 5% 2%;
+  border-radius: 15% / 8%;
+  background: color-mix(in srgb, var(--composition-shadow-color) 72%, transparent);
+  box-shadow:
+    0 42px 64px var(--composition-shadow-color),
+    0 10px 22px color-mix(in srgb, var(--composition-shadow-color) 58%, transparent);
+  content: "";
+}
+
+.composition-screen {
+  position: absolute;
+  z-index: 1;
+  overflow: hidden;
+  background: #f2f4f5;
+}
+
+.composition-screen img,
+.composition-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-position: center;
+}
+
+.composition-frame {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.composition-card {
+  overflow: hidden;
+  border: 3px solid rgb(255 255 255 / 68%);
+  border-radius: 58px;
+  background: #f2f4f5;
+}
+
+.composition-card::before {
+  inset: 0;
+  border-radius: inherit;
+}
+
+.composition-placeholder {
+  display: grid;
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  place-items: center;
+  padding: 32px;
+  color: #52606b;
+  background: linear-gradient(145deg, #f5f1e9, #d8e8ec);
+  font-size: 32px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.focus-lens {
+  position: absolute;
+  z-index: 8;
+  overflow: hidden;
+  border-radius: 50%;
+  background-color: #eef1f4;
+  background-repeat: no-repeat;
+  box-shadow:
+    0 34px 72px var(--composition-shadow-color),
+    0 8px 20px color-mix(in srgb, var(--composition-shadow-color) 62%, transparent);
+}
+
+.focus-lens::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  border: 10px solid var(--lens-border-color);
+  border-radius: inherit;
+  content: "";
+  pointer-events: none;
+}
+
+.focus-lens img {
+  position: absolute;
+  display: block;
+  max-width: none;
+  object-fit: fill;
+}
+
+.composition-arrow {
+  position: absolute;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--poster-accent-color);
+  box-shadow: 0 18px 42px color-mix(in srgb, var(--poster-accent-color) 40%, transparent);
+  font-size: 58px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.composition-annotation {
+  position: absolute;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  color: var(--poster-subtitle-color);
+  font-family: "PingFang SC", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  font-size: 38px;
+  font-weight: 640;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.composition-annotation-index {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  color: var(--annotation-text);
+  background: var(--annotation-surface);
+  font-size: 28px;
+  font-variant-numeric: tabular-nums;
+}
+
+.composition-annotation-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
 .device::before {

@@ -220,6 +220,9 @@ const ARTBOARD = Object.freeze(PRODUCT.artboard);
 const MODEL_GEOMETRY = Object.freeze(PRODUCT.geometry);
 const FRAME_GROUPS = PRODUCT.frameGroups;
 const DEFAULTS = Object.freeze(PRODUCT.defaults);
+const LAYOUT_ENGINE =
+  productKey === "iphone" && window.LaunchFrameLayouts ? window.LaunchFrameLayouts : null;
+const IPHONE_LAYOUTS_ENABLED = Boolean(LAYOUT_ENGINE);
 
 const FRAMES = FRAME_GROUPS.flatMap((group) =>
   group.colors.map(([colorId, colorLabel, fileColor]) => ({
@@ -245,6 +248,7 @@ const elements = {
   subtitleInput: document.querySelector("#subtitleInput"),
   posterTitle: document.querySelector("#posterTitle"),
   posterSubtitle: document.querySelector("#posterSubtitle"),
+  compositionLayer: document.querySelector("#compositionLayer"),
   frameSelect: document.querySelector("#frameSelect"),
   frameImage: document.querySelector("#frameImage"),
   device: document.querySelector("#device"),
@@ -274,6 +278,31 @@ const elements = {
   exportMeasureTitle: document.querySelector("#exportMeasureTitle"),
   exportMeasureSubtitle: document.querySelector("#exportMeasureSubtitle"),
   zoomLabel: document.querySelector("#zoomLabel"),
+  layoutGallery: document.querySelector("#layoutGallery"),
+  themeOptions: document.querySelector("#themeOptions"),
+  slotAssignmentPanel: document.querySelector("#slotAssignmentPanel"),
+  slotAssignments: document.querySelector("#slotAssignments"),
+  slotAssignmentHint: document.querySelector("#slotAssignmentHint"),
+  annotationPanel: document.querySelector("#annotationPanel"),
+  annotationsToggle: document.querySelector("#annotationsToggle"),
+  annotationFields: document.querySelector("#annotationFields"),
+  annotationStatus: document.querySelector("#annotationStatus"),
+  layoutValidationStatus: document.querySelector("#layoutValidationStatus"),
+  classicLayoutControls: document.querySelector("#classicLayoutControls"),
+  presetLayoutControls: document.querySelector("#presetLayoutControls"),
+  layoutScaleInput: document.querySelector("#layoutScaleInput"),
+  layoutScaleOutput: document.querySelector("#layoutScaleOutput"),
+  layoutYInput: document.querySelector("#layoutYInput"),
+  layoutYOutput: document.querySelector("#layoutYOutput"),
+  layoutSpreadInput: document.querySelector("#layoutSpreadInput"),
+  layoutSpreadOutput: document.querySelector("#layoutSpreadOutput"),
+  layoutTiltInput: document.querySelector("#layoutTiltInput"),
+  layoutTiltOutput: document.querySelector("#layoutTiltOutput"),
+  focusXInput: document.querySelector("#focusXInput"),
+  focusXOutput: document.querySelector("#focusXOutput"),
+  focusYInput: document.querySelector("#focusYInput"),
+  focusYOutput: document.querySelector("#focusYOutput"),
+  resetLayoutButton: document.querySelector("#resetLayoutButton"),
 };
 
 function applyProductConfiguration() {
@@ -327,7 +356,27 @@ function createPage({
   autoMatchFrame = false,
   objectUrl = null,
   isSample = false,
+  isAuxiliary = false,
+  imageState = screenshot ? "loading" : "empty",
+  layoutId = "classic",
+  layoutTuning,
+  slotOverrides,
+  annotations,
 }) {
+  const layoutState = LAYOUT_ENGINE
+    ? LAYOUT_ENGINE.createDefaultLayoutState({
+        layoutId,
+        layoutTuning,
+        slotOverrides,
+        annotations,
+      })
+    : {
+        layoutId: "classic",
+        layoutTuning: null,
+        slotOverrides: {},
+        annotations: { enabled: false, labels: ["", "", ""] },
+      };
+
   return {
     id: `screenshot-${nextPageId++}`,
     title,
@@ -340,6 +389,10 @@ function createPage({
     autoMatchFrame,
     objectUrl,
     isSample,
+    isAuxiliary,
+    imageState,
+    annotationOverflow: false,
+    ...layoutState,
   };
 }
 
@@ -356,6 +409,27 @@ function createDefaultPage() {
 
 const screenshotParam = params.get("screenshot");
 const hasScreenshotParam = screenshotParam !== null && screenshotParam.trim() !== "";
+const initialLayoutState = LAYOUT_ENGINE
+  ? LAYOUT_ENGINE.createDefaultLayoutState({
+      layoutId: params.get("layout") ?? "classic",
+      layoutTuning: {
+        scale: params.has("layoutScale") ? params.get("layoutScale") : undefined,
+        y: params.has("layoutY") ? params.get("layoutY") : undefined,
+        spread: params.has("layoutSpread") ? params.get("layoutSpread") : undefined,
+        tilt: params.has("layoutTilt") ? params.get("layoutTilt") : undefined,
+        focusX: params.has("focusX") ? params.get("focusX") : undefined,
+        focusY: params.has("focusY") ? params.get("focusY") : undefined,
+      },
+      annotations: {
+        enabled: params.get("annotations") === "1",
+        labels: [
+          params.get("annotation1") ?? "",
+          params.get("annotation2") ?? "",
+          params.get("annotation3") ?? "",
+        ],
+      },
+    })
+  : null;
 const initialPage = createPage({
   title: params.get("title") ?? DEFAULTS.title,
   subtitle: params.get("subtitle") ?? DEFAULTS.subtitle,
@@ -364,10 +438,33 @@ const initialPage = createPage({
   fit: normalizeFitMode(params.get("fit") ?? DEFAULTS.fit),
   autoMatchFrame: productKey === "ipad" && hasScreenshotParam && !params.has("frame"),
   isSample: !hasScreenshotParam,
+  ...(initialLayoutState ?? {}),
 });
+
+const initialPages = [initialPage];
+if (LAYOUT_ENGINE && isRenderMode) {
+  for (let slot = 1; slot <= 2; slot += 1) {
+    const parameterIndex = slot + 1;
+    const screenshot = params.get(`screenshot${parameterIndex}`);
+    if (!screenshot?.trim()) continue;
+    const auxiliaryPage = createPage({
+      title: "",
+      subtitle: "",
+      screenshot,
+      screenshotName: `URL 截图 ${parameterIndex}`,
+      fit: normalizeFitMode(params.get(`fit${parameterIndex}`) ?? DEFAULTS.fit),
+      isAuxiliary: true,
+    });
+    initialPages.push(auxiliaryPage);
+    initialPage.slotOverrides[slot] = auxiliaryPage.id;
+  }
+}
 
 const state = {
   frame: params.get("frame") ?? DEFAULTS.frame,
+  themeId: LAYOUT_ENGINE
+    ? LAYOUT_ENGINE.normalizeThemeId(params.get("theme") ?? "porcelain")
+    : null,
   deviceWidth: getNumericParam(
     "deviceWidth",
     DEFAULTS.deviceWidth,
@@ -380,7 +477,7 @@ const state = {
     PRODUCT.layout.deviceTop.min,
     PRODUCT.layout.deviceTop.max,
   ),
-  pages: [initialPage],
+  pages: initialPages,
   activePageId: initialPage.id,
 };
 
@@ -432,8 +529,12 @@ function getActivePage() {
   return state.pages.find((page) => page.id === state.activePageId) ?? state.pages[0];
 }
 
+function getOutputPages() {
+  return state.pages.filter((page) => !page.isAuxiliary);
+}
+
 function getActivePageIndex() {
-  return state.pages.findIndex((page) => page.id === state.activePageId);
+  return getOutputPages().findIndex((page) => page.id === state.activePageId);
 }
 
 function releasePage(page) {
@@ -471,6 +572,16 @@ function applyFrame(frameId) {
 
   state.frame = frame.id;
   elements.frameSelect.value = frame.id;
+  if (LAYOUT_ENGINE) {
+    elements.frameImage.onload = () => {
+      delete elements.frameImage.dataset.loadError;
+      updateRenderState();
+    };
+    elements.frameImage.onerror = () => {
+      elements.frameImage.dataset.loadError = "iPhone 机框无法读取";
+      updateRenderState();
+    };
+  }
   elements.frameImage.src = frame.src;
   elements.frameImage.alt = `${frame.label} 原机框`;
   elements.device.style.aspectRatio = `${geometry.frameWidth} / ${geometry.frameHeight}`;
@@ -483,6 +594,371 @@ function applyFrame(frameId) {
     geometry.screenRadius,
     geometry.screenWidth,
   )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
+}
+
+function getLayoutPreset(page = getActivePage()) {
+  if (!LAYOUT_ENGINE) return null;
+  return LAYOUT_ENGINE.LAYOUT_PRESETS[LAYOUT_ENGINE.normalizeLayoutId(page.layoutId)];
+}
+
+function resolvePageSlots(page = getActivePage()) {
+  if (!LAYOUT_ENGINE) return [page];
+  const preset = getLayoutPreset(page);
+  return LAYOUT_ENGINE.resolveSlotPages(
+    state.pages,
+    page.id,
+    page.slotOverrides,
+    preset.slotCount,
+  );
+}
+
+function getPageLayoutValidation(page = getActivePage()) {
+  if (!LAYOUT_ENGINE) {
+    return { valid: Boolean(page.screenshot), errors: page.screenshot ? [] : ["截图为空"] };
+  }
+  const preset = getLayoutPreset(page);
+  const validation = LAYOUT_ENGINE.validateComposition({
+    slots: resolvePageSlots(page),
+    slotCount: preset.slotCount,
+    annotationOverflow: page.annotationOverflow,
+  });
+  if (preset.id === "classic") return validation;
+
+  const textLines = getPageTextLines(page);
+  const scene = LAYOUT_ENGINE.resolveComposition({
+    layoutId: page.layoutId,
+    tuning: page.layoutTuning,
+    classicDeviceWidth: state.deviceWidth,
+    classicDeviceTop: state.deviceTop,
+  });
+  const titleSize = PRODUCT.copy.title.fontSize * scene.copy.titleScale;
+  const subtitleSize = PRODUCT.copy.subtitle.fontSize * scene.copy.subtitleScale;
+  const copyBottom =
+    scene.copy.top +
+    textLines.title.length * titleSize * PRODUCT.copy.title.lineHeight +
+    (textLines.subtitle.length ? PRODUCT.copy.gap : 0) +
+    textLines.subtitle.length * subtitleSize * PRODUCT.copy.subtitle.lineHeight;
+  const firstVisualTop = Math.min(...scene.nodes.map((node) => node.top));
+  const errors = [...validation.errors];
+  const hasHorizontalOverflow = [
+    elements.exportMeasureTitle,
+    elements.exportMeasureSubtitle,
+  ].some((element) => element.scrollWidth > element.clientWidth + 1);
+  if (hasHorizontalOverflow) {
+    errors.push("标题或说明文案超出安全宽度");
+  }
+  if (copyBottom > firstVisualTop - 48) {
+    errors.push("标题或说明文案过长，已进入设备安全区");
+  }
+  return { valid: errors.length === 0, errors };
+}
+
+function applyTheme() {
+  if (!LAYOUT_ENGINE) return;
+  state.themeId = LAYOUT_ENGINE.normalizeThemeId(state.themeId);
+  const theme = LAYOUT_ENGINE.THEMES[state.themeId];
+  const rootStyle = document.documentElement.style;
+
+  rootStyle.setProperty("--poster-background", LAYOUT_ENGINE.getBackgroundCss(state.themeId));
+  rootStyle.setProperty("--poster-title-color", theme.titleColor);
+  rootStyle.setProperty("--poster-subtitle-color", theme.subtitleColor);
+  rootStyle.setProperty("--poster-accent-color", theme.accentColor);
+  rootStyle.setProperty("--annotation-surface", theme.annotationSurface);
+  rootStyle.setProperty("--annotation-text", theme.annotationText);
+  rootStyle.setProperty("--composition-shadow-color", theme.shadowColor);
+  rootStyle.setProperty("--lens-border-color", theme.lensBorder);
+  elements.artboard.dataset.theme = state.themeId;
+
+  elements.themeOptions?.querySelectorAll(".theme-option").forEach((button) => {
+    button.setAttribute("aria-checked", String(button.dataset.themeId === state.themeId));
+  });
+}
+
+function applyCopyLayout(page, scene) {
+  if (!LAYOUT_ENGINE) return;
+  const copyElement = elements.posterTitle.parentElement;
+  const rootStyle = document.documentElement.style;
+  const copy = scene.copy;
+
+  rootStyle.setProperty("--copy-width", `${copy.width}px`);
+  rootStyle.setProperty("--title-font-size", `${PRODUCT.copy.title.fontSize * copy.titleScale}px`);
+  rootStyle.setProperty(
+    "--subtitle-font-size",
+    `${PRODUCT.copy.subtitle.fontSize * copy.subtitleScale}px`,
+  );
+
+  if (page.layoutId === "classic") {
+    rootStyle.setProperty("--copy-top", `${PRODUCT.copy.top}px`);
+    rootStyle.setProperty("--copy-side", `${PRODUCT.copy.side}px`);
+    rootStyle.setProperty("--copy-width", `${ARTBOARD.width - PRODUCT.copy.side * 2}px`);
+    rootStyle.setProperty("--title-font-size", `${PRODUCT.copy.title.fontSize}px`);
+    rootStyle.setProperty("--subtitle-font-size", `${PRODUCT.copy.subtitle.fontSize}px`);
+    copyElement.removeAttribute("style");
+    return;
+  }
+
+  copyElement.style.top = `${copy.top}px`;
+  copyElement.style.right = "auto";
+  copyElement.style.left = `${copy.left}px`;
+  copyElement.style.width = `${copy.width}px`;
+  copyElement.style.textAlign = copy.align;
+}
+
+function createCompositionPlaceholder(message) {
+  const placeholder = document.createElement("span");
+  placeholder.className = "composition-placeholder";
+  placeholder.textContent = message;
+  return placeholder;
+}
+
+function trackCompositionImage(image, page, placeholder) {
+  if (!page?.screenshot) return;
+  page.imageState = page.imageState === "ready" ? "ready" : "loading";
+  image.crossOrigin = "anonymous";
+  image.alt = "";
+  image.onload = () => {
+    page.imageState = "ready";
+    page.imageWidth ??= image.naturalWidth;
+    page.imageHeight ??= image.naturalHeight;
+    placeholder.hidden = true;
+    updateRenderState();
+    updatePageControls();
+  };
+  image.onerror = () => {
+    page.imageState = "error";
+    image.hidden = true;
+    placeholder.hidden = false;
+    placeholder.textContent = "截图无法读取";
+    updateRenderState();
+    updatePageControls();
+  };
+  image.src = page.screenshot;
+}
+
+function createDeviceNode(node, slotPage, frame, geometry) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "composition-device";
+  wrapper.style.left = `${node.cx}px`;
+  wrapper.style.top = `${node.top}px`;
+  wrapper.style.width = `${node.width}px`;
+  wrapper.style.aspectRatio = `${geometry.frameWidth} / ${geometry.frameHeight}`;
+  wrapper.style.zIndex = String(node.z);
+  wrapper.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
+
+  const screen = document.createElement("div");
+  screen.className = "composition-screen";
+  screen.style.left = toPercent(geometry.screenX, geometry.frameWidth);
+  screen.style.top = toPercent(geometry.screenY, geometry.frameHeight);
+  screen.style.width = toPercent(geometry.screenWidth, geometry.frameWidth);
+  screen.style.height = toPercent(geometry.screenHeight, geometry.frameHeight);
+  screen.style.borderRadius = `${toPercent(
+    geometry.screenRadius,
+    geometry.screenWidth,
+  )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
+
+  const screenshot = document.createElement("img");
+  screenshot.style.objectFit = slotPage?.fit ?? DEFAULTS.fit;
+  const placeholder = createCompositionPlaceholder(
+    slotPage?.screenshot ? "正在读取截图" : `缺少第 ${node.slot + 1} 张截图`,
+  );
+  screen.append(screenshot, placeholder);
+  if (slotPage?.screenshot) trackCompositionImage(screenshot, slotPage, placeholder);
+
+  const frameImage = document.createElement("img");
+  frameImage.className = "composition-frame";
+  frameImage.alt = "";
+  frameImage.onload = () => {
+    delete frameImage.dataset.loadError;
+    updateRenderState();
+  };
+  frameImage.onerror = () => {
+    frameImage.dataset.loadError = "iPhone 机框无法读取";
+    updateRenderState();
+  };
+  frameImage.src = frame.src;
+  wrapper.append(screen, frameImage);
+  return wrapper;
+}
+
+function createCardNode(node, slotPage) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "composition-card";
+  wrapper.style.left = `${node.cx}px`;
+  wrapper.style.top = `${node.top}px`;
+  wrapper.style.width = `${node.width}px`;
+  wrapper.style.aspectRatio = PRODUCT.screenshotAspectRatio;
+  wrapper.style.zIndex = String(node.z);
+  wrapper.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
+
+  const screenshot = document.createElement("img");
+  screenshot.style.objectFit = slotPage?.fit ?? DEFAULTS.fit;
+  const placeholder = createCompositionPlaceholder(
+    slotPage?.screenshot ? "正在读取截图" : `缺少第 ${node.slot + 1} 张截图`,
+  );
+  wrapper.append(screenshot, placeholder);
+  if (slotPage?.screenshot) trackCompositionImage(screenshot, slotPage, placeholder);
+  return wrapper;
+}
+
+function appendCompositionAnnotations(scene, page) {
+  if (!page.annotations.enabled || !scene.annotations) return;
+
+  if (scene.annotations.connector) {
+    const connector = scene.annotations.connector;
+    const arrow = document.createElement("span");
+    arrow.className = "composition-arrow";
+    arrow.textContent = "→";
+    arrow.style.left = `${connector.cx - connector.size / 2}px`;
+    arrow.style.top = `${connector.cy - connector.size / 2}px`;
+    arrow.style.width = `${connector.size}px`;
+    arrow.style.height = `${connector.size}px`;
+    elements.compositionLayer.append(arrow);
+  }
+
+  scene.annotations.labels.forEach((position, index) => {
+    const annotation = document.createElement("div");
+    annotation.className = "composition-annotation";
+    annotation.style.left = `${position.cx - position.width / 2}px`;
+    annotation.style.top = `${position.top}px`;
+    annotation.style.width = `${position.width}px`;
+
+    const number = document.createElement("span");
+    number.className = "composition-annotation-index";
+    number.textContent = String(index + 1).padStart(2, "0");
+    const label = document.createElement("span");
+    label.className = "composition-annotation-label";
+    label.textContent = page.annotations.labels[index] ?? "";
+    annotation.append(number, label);
+    elements.compositionLayer.append(annotation);
+  });
+}
+
+function measureAnnotationOverflow(page) {
+  if (!LAYOUT_ENGINE || page !== getActivePage()) return;
+  page.annotationOverflow = Array.from(
+    elements.compositionLayer.querySelectorAll(".composition-annotation-label"),
+  ).some((label) => Boolean(label.textContent) && label.scrollWidth > label.clientWidth + 1);
+  if (elements.annotationStatus) {
+    elements.annotationStatus.textContent = page.annotationOverflow
+      ? "步骤标签过长，请缩短后再导出。"
+      : "";
+    elements.annotationStatus.classList.toggle("is-error", page.annotationOverflow);
+  }
+  updatePageControls();
+  updateRenderState();
+}
+
+function applyComposition(page = getActivePage()) {
+  if (!LAYOUT_ENGINE) return;
+  page.layoutId = LAYOUT_ENGINE.normalizeLayoutId(page.layoutId);
+  page.layoutTuning = LAYOUT_ENGINE.normalizeTuning(page.layoutTuning);
+  const scene = LAYOUT_ENGINE.resolveComposition({
+    layoutId: page.layoutId,
+    tuning: page.layoutTuning,
+    classicDeviceWidth: state.deviceWidth,
+    classicDeviceTop: state.deviceTop,
+  });
+
+  applyTheme();
+  applyCopyLayout(page, scene);
+  elements.artboard.dataset.layout = page.layoutId;
+
+  if (page.layoutId === "classic") {
+    elements.compositionLayer.hidden = true;
+    elements.compositionLayer.replaceChildren();
+    elements.device.hidden = false;
+    page.annotationOverflow = false;
+    updateRenderState();
+    return;
+  }
+
+  elements.device.hidden = true;
+  elements.compositionLayer.hidden = false;
+  elements.compositionLayer.replaceChildren();
+  const slots = resolvePageSlots(page);
+  const selectedFrame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
+  const geometry = MODEL_GEOMETRY[selectedFrame.model];
+
+  scene.nodes.forEach((node) => {
+    const slotPage = slots[node.slot];
+    elements.compositionLayer.append(
+      node.type === "card"
+        ? createCardNode(node, slotPage)
+        : createDeviceNode(node, slotPage, selectedFrame, geometry),
+    );
+  });
+
+  if (scene.lens) {
+    const lens = document.createElement("div");
+    const sourcePage = slots[0];
+    lens.className = "focus-lens";
+    lens.style.left = `${scene.lens.cx - scene.lens.diameter / 2}px`;
+    lens.style.top = `${scene.lens.cy - scene.lens.diameter / 2}px`;
+    lens.style.width = `${scene.lens.diameter}px`;
+    lens.style.height = `${scene.lens.diameter}px`;
+    if (sourcePage?.screenshot) {
+      const lensImage = document.createElement("img");
+      lensImage.crossOrigin = "anonymous";
+      lensImage.alt = "";
+      lensImage.onload = () => {
+        const cropSize =
+          Math.min(lensImage.naturalWidth, lensImage.naturalHeight) / scene.lens.zoom;
+        const sourceX = Math.min(
+          Math.max(0, lensImage.naturalWidth - cropSize),
+          Math.max(0, lensImage.naturalWidth * scene.lens.focusX - cropSize / 2),
+        );
+        const sourceY = Math.min(
+          Math.max(0, lensImage.naturalHeight - cropSize),
+          Math.max(0, lensImage.naturalHeight * scene.lens.focusY - cropSize / 2),
+        );
+        const displayScale = scene.lens.diameter / cropSize;
+        lensImage.style.left = `${-sourceX * displayScale}px`;
+        lensImage.style.top = `${-sourceY * displayScale}px`;
+        lensImage.style.width = `${lensImage.naturalWidth * displayScale}px`;
+        lensImage.style.height = `${lensImage.naturalHeight * displayScale}px`;
+        updateRenderState();
+      };
+      lensImage.onerror = () => {
+        sourcePage.imageState = "error";
+        updateRenderState();
+        updatePageControls();
+      };
+      lensImage.src = sourcePage.screenshot;
+      lens.append(lensImage);
+    }
+    elements.compositionLayer.append(lens);
+  }
+
+  appendCompositionAnnotations(scene, page);
+  window.requestAnimationFrame(() => measureAnnotationOverflow(page));
+  updateRenderState();
+}
+
+function updateRenderState() {
+  if (!isRenderMode || !LAYOUT_ENGINE) return;
+  const page = getActivePage();
+  const validation = getPageLayoutValidation(page);
+  if (!validation.valid) {
+    document.body.dataset.renderState = "error";
+    document.body.dataset.renderError = validation.errors.join("；");
+    return;
+  }
+
+  const images =
+    page.layoutId === "classic"
+      ? [elements.screenshotImage, elements.frameImage]
+      : Array.from(elements.compositionLayer.querySelectorAll("img"));
+  const failedImage = images.find((image) => image.dataset.loadError);
+  if (failedImage) {
+    document.body.dataset.renderState = "error";
+    document.body.dataset.renderError = failedImage.dataset.loadError;
+    return;
+  }
+  const hasPendingImage = images.some(
+    (image) => !image.complete || image.naturalWidth === 0 || image.naturalHeight === 0,
+  );
+  document.body.dataset.renderState = hasPendingImage ? "loading" : "ready";
+  if (!hasPendingImage) delete document.body.dataset.renderError;
 }
 
 function applyText(page = getActivePage()) {
@@ -504,10 +980,17 @@ function applyScreenshot(page = getActivePage()) {
   elements.fitSelect.value = page.fit;
   elements.screenshotName.textContent = `当前：${page.screenshotName}`;
 
-  if (!page.screenshot) return;
+  if (!page.screenshot) {
+    page.imageState = "empty";
+    updateRenderState();
+    return;
+  }
+
+  page.imageState = "loading";
 
   elements.screenshotImage.onload = () => {
     if (getActivePage().id !== pageId) return;
+    page.imageState = "ready";
     page.imageWidth = elements.screenshotImage.naturalWidth;
     page.imageHeight = elements.screenshotImage.naturalHeight;
 
@@ -518,12 +1001,17 @@ function applyScreenshot(page = getActivePage()) {
 
     elements.screenshotImage.hidden = false;
     elements.screenPlaceholder.hidden = true;
+    updateRenderState();
+    updatePageControls();
   };
 
   elements.screenshotImage.onerror = () => {
     if (getActivePage().id !== pageId) return;
+    page.imageState = "error";
     elements.screenshotImage.hidden = true;
     elements.screenPlaceholder.hidden = false;
+    updateRenderState();
+    updatePageControls();
   };
 
   elements.screenshotImage.src = page.screenshot;
@@ -538,10 +1026,240 @@ function applyLayout() {
   elements.deviceTopOutput.value = `${state.deviceTop} px`;
 }
 
+function createLayoutThumbnail(preset) {
+  const thumbnail = document.createElement("span");
+  thumbnail.className = "layout-thumbnail";
+  thumbnail.setAttribute("aria-hidden", "true");
+  const scene = LAYOUT_ENGINE.resolveComposition({
+    layoutId: preset.id,
+    tuning: {},
+    classicDeviceWidth: DEFAULTS.deviceWidth,
+    classicDeviceTop: DEFAULTS.deviceTop,
+  });
+  const scaleX = 32 / LAYOUT_ENGINE.ARTBOARD.width;
+  const scaleY = 52 / LAYOUT_ENGINE.ARTBOARD.height;
+
+  scene.nodes.forEach((node) => {
+    const miniature = document.createElement("i");
+    miniature.className = `layout-thumbnail-device${node.type === "card" ? " is-card" : ""}`;
+    miniature.style.left = `${node.cx * scaleX}px`;
+    miniature.style.top = `${node.top * scaleY}px`;
+    miniature.style.width = `${Math.max(4, node.width * scaleX)}px`;
+    miniature.style.height = `${Math.max(9, node.width * 2.04 * scaleY)}px`;
+    miniature.style.zIndex = String(node.z);
+    miniature.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
+    thumbnail.append(miniature);
+  });
+
+  const slotCount = document.createElement("span");
+  slotCount.className = "layout-card-slot-count";
+  slotCount.textContent = `${preset.slotCount}图`;
+  thumbnail.append(slotCount);
+  return thumbnail;
+}
+
+function populateLayoutGallery() {
+  if (!LAYOUT_ENGINE || !elements.layoutGallery) return;
+  const fragment = document.createDocumentFragment();
+  Object.values(LAYOUT_ENGINE.LAYOUT_PRESETS).forEach((preset) => {
+    const button = document.createElement("button");
+    button.className = "layout-card";
+    button.type = "button";
+    button.dataset.layoutId = preset.id;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", "false");
+
+    const copy = document.createElement("span");
+    copy.className = "layout-card-copy";
+    const title = document.createElement("strong");
+    title.textContent = preset.label;
+    const description = document.createElement("small");
+    description.textContent = preset.description;
+    copy.append(title, description);
+    button.append(createLayoutThumbnail(preset), copy);
+    fragment.append(button);
+  });
+  elements.layoutGallery.replaceChildren(fragment);
+}
+
+function populateThemeOptions() {
+  if (!LAYOUT_ENGINE || !elements.themeOptions) return;
+  const fragment = document.createDocumentFragment();
+  Object.values(LAYOUT_ENGINE.THEMES).forEach((theme) => {
+    const button = document.createElement("button");
+    button.className = "theme-option";
+    button.type = "button";
+    button.dataset.themeId = theme.id;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-checked", "false");
+    button.title = theme.description;
+
+    const swatch = document.createElement("span");
+    swatch.className = "theme-swatch";
+    swatch.style.background = LAYOUT_ENGINE.getBackgroundCss(theme.id);
+    const label = document.createElement("span");
+    label.textContent = theme.label;
+    button.append(swatch, label);
+    fragment.append(button);
+  });
+  elements.themeOptions.replaceChildren(fragment);
+}
+
+function renderSlotAssignments(page, preset, slots) {
+  if (!elements.slotAssignmentPanel) return;
+  elements.slotAssignmentPanel.hidden = preset.slotCount <= 1;
+  elements.slotAssignments.replaceChildren();
+  if (preset.slotCount <= 1) return;
+
+  const existingIds = new Set(state.pages.map((item) => item.id));
+  Object.keys(page.slotOverrides).forEach((slot) => {
+    if (!existingIds.has(page.slotOverrides[slot])) delete page.slotOverrides[slot];
+  });
+
+  for (let slot = 1; slot < preset.slotCount; slot += 1) {
+    const field = document.createElement("label");
+    field.className = "slot-field";
+    field.textContent = `第 ${slot + 1} 屏`;
+    const select = document.createElement("select");
+    select.dataset.slotIndex = String(slot);
+
+    const automatic = document.createElement("option");
+    automatic.value = "";
+    automatic.textContent = slots[slot]
+      ? `自动 · ${slots[slot].screenshotName}`
+      : "自动 · 暂无可用截图";
+    select.append(automatic);
+
+    const usedByOtherSlots = new Set(
+      Object.entries(page.slotOverrides)
+        .filter(([index]) => Number(index) !== slot)
+        .map(([, pageId]) => pageId),
+    );
+    state.pages.forEach((candidate) => {
+      if (candidate.id === page.id || candidate.isAuxiliary) return;
+      const option = document.createElement("option");
+      option.value = candidate.id;
+      option.textContent = candidate.screenshotName;
+      option.disabled = usedByOtherSlots.has(candidate.id);
+      select.append(option);
+    });
+    select.value = page.slotOverrides[slot] ?? "";
+    field.append(select);
+    elements.slotAssignments.append(field);
+  }
+
+  const validation = getPageLayoutValidation(page);
+  const missingError = validation.errors.find((error) => error.includes("槽位为空"));
+  elements.slotAssignmentHint.textContent = missingError
+    ? `${missingError}；添加截图或手动选择后才能导出。`
+    : "默认按当前顺序自动取后续截图；手动选择会在重新排序后保留。";
+  elements.slotAssignmentHint.classList.toggle("is-error", Boolean(missingError));
+}
+
+function renderAnnotationFields(page, preset) {
+  if (!elements.annotationPanel) return;
+  elements.annotationPanel.hidden = !preset.annotations;
+  elements.annotationFields.replaceChildren();
+  if (!preset.annotations) return;
+
+  elements.annotationsToggle.checked = page.annotations.enabled;
+  elements.annotationFields.hidden = !page.annotations.enabled;
+  if (page.annotations.enabled) {
+    for (let index = 0; index < preset.slotCount; index += 1) {
+      const field = document.createElement("label");
+      field.className = "annotation-field";
+      field.textContent = `步骤 ${String(index + 1).padStart(2, "0")}`;
+      const input = document.createElement("input");
+      input.type = "text";
+      input.maxLength = 80;
+      input.dataset.annotationIndex = String(index);
+      input.value = page.annotations.labels[index] ?? "";
+      input.placeholder = "可选单行短标签";
+      field.append(input);
+      elements.annotationFields.append(field);
+    }
+  }
+
+  elements.annotationStatus.textContent = page.annotationOverflow
+    ? "步骤标签过长，请缩短后再导出。"
+    : "";
+  elements.annotationStatus.classList.toggle("is-error", page.annotationOverflow);
+}
+
+function setTuningControl(input, output, value, format) {
+  if (!input || !output) return;
+  input.value = String(value);
+  output.value = format(value);
+}
+
+function renderTuningControls(page, preset) {
+  if (!elements.classicLayoutControls) return;
+  const isClassic = preset.id === "classic";
+  elements.classicLayoutControls.hidden = !isClassic;
+  elements.presetLayoutControls.hidden = isClassic;
+  if (isClassic) return;
+
+  const availableControls = new Set(preset.controls);
+  document.querySelectorAll(".layout-tuning-control").forEach((control) => {
+    control.hidden = !availableControls.has(control.dataset.tuningControl);
+  });
+
+  setTuningControl(
+    elements.layoutScaleInput,
+    elements.layoutScaleOutput,
+    page.layoutTuning.scale,
+    (value) => `${Math.round(value * 100)}%`,
+  );
+  setTuningControl(
+    elements.layoutYInput,
+    elements.layoutYOutput,
+    page.layoutTuning.y,
+    (value) => `${value > 0 ? "+" : ""}${Math.round(value)} px`,
+  );
+  setTuningControl(
+    elements.layoutSpreadInput,
+    elements.layoutSpreadOutput,
+    page.layoutTuning.spread,
+    (value) => `${Math.round(value * 100)}%`,
+  );
+  setTuningControl(
+    elements.layoutTiltInput,
+    elements.layoutTiltOutput,
+    page.layoutTuning.tilt,
+    (value) => `${Math.round(value * 100)}%`,
+  );
+  setTuningControl(
+    elements.focusXInput,
+    elements.focusXOutput,
+    page.layoutTuning.focusX,
+    (value) => `${Math.round(value * 100)}%`,
+  );
+  setTuningControl(
+    elements.focusYInput,
+    elements.focusYOutput,
+    page.layoutTuning.focusY,
+    (value) => `${Math.round(value * 100)}%`,
+  );
+}
+
+function renderLayoutEditor(page = getActivePage()) {
+  if (!LAYOUT_ENGINE) return;
+  const preset = getLayoutPreset(page);
+  const slots = resolvePageSlots(page);
+
+  elements.layoutGallery.querySelectorAll(".layout-card").forEach((button) => {
+    button.setAttribute("aria-checked", String(button.dataset.layoutId === preset.id));
+  });
+  applyTheme();
+  renderSlotAssignments(page, preset, slots);
+  renderAnnotationFields(page, preset);
+  renderTuningControls(page, preset);
+}
+
 function renderScreenshotList() {
   const fragment = document.createDocumentFragment();
 
-  state.pages.forEach((page, index) => {
+  getOutputPages().forEach((page, index) => {
     const listItem = document.createElement("li");
     listItem.className = "screenshot-item";
 
@@ -589,12 +1307,23 @@ function renderScreenshotList() {
 
 function updatePageControls() {
   const activeIndex = getActivePageIndex();
-  const pageCount = state.pages.length;
+  const outputPages = getOutputPages();
+  const pageCount = outputPages.length;
   const isLocked = isImporting || isExporting;
   const hasMultiplePages = pageCount > 1;
-  const isDefaultOnly = pageCount === 1 && state.pages[0].isSample;
-  const hasActiveScreenshot = Boolean(getActivePage().screenshot);
-  const hasCompleteScreenshotSet = state.pages.every((page) => Boolean(page.screenshot));
+  const isDefaultOnly = pageCount === 1 && outputPages[0].isSample;
+  const activeValidation = getPageLayoutValidation(getActivePage());
+  const hasActiveScreenshot = activeValidation.valid;
+  const hasCompleteScreenshotSet = outputPages.every(
+    (page) => getPageLayoutValidation(page).valid,
+  );
+
+  if (elements.layoutValidationStatus) {
+    elements.layoutValidationStatus.textContent = activeValidation.valid
+      ? ""
+      : activeValidation.errors.join("；");
+    elements.layoutValidationStatus.classList.toggle("is-error", !activeValidation.valid);
+  }
 
   elements.pagePosition.value = `${activeIndex + 1} / ${pageCount}`;
   elements.moveScreenshotPrevious.disabled = isLocked || activeIndex <= 0;
@@ -612,6 +1341,22 @@ function updatePageControls() {
   elements.fitSelect.disabled = isLocked;
   elements.deviceWidthInput.disabled = isLocked;
   elements.deviceTopInput.disabled = isLocked;
+  elements.layoutGallery?.querySelectorAll("button").forEach((button) => {
+    button.disabled = isLocked;
+  });
+  elements.themeOptions?.querySelectorAll("button").forEach((button) => {
+    button.disabled = isLocked;
+  });
+  elements.slotAssignments?.querySelectorAll("select").forEach((select) => {
+    select.disabled = isLocked;
+  });
+  elements.annotationsToggle && (elements.annotationsToggle.disabled = isLocked);
+  elements.annotationFields?.querySelectorAll("input").forEach((input) => {
+    input.disabled = isLocked;
+  });
+  elements.presetLayoutControls?.querySelectorAll("input, button").forEach((control) => {
+    control.disabled = isLocked;
+  });
   elements.resetButton.disabled = isLocked;
   elements.focusButton.disabled = isLocked;
   elements.exportButton.disabled = isLocked || !hasActiveScreenshot;
@@ -628,6 +1373,8 @@ function applyState() {
   applyFrame(state.frame);
   applyScreenshot();
   applyLayout();
+  applyComposition();
+  renderLayoutEditor();
   renderScreenshotList();
   updatePageControls();
 }
@@ -638,6 +1385,8 @@ function selectPage(pageId, { focus = false } = {}) {
   state.activePageId = pageId;
   applyText();
   applyScreenshot();
+  applyComposition();
+  renderLayoutEditor();
   renderScreenshotList();
   updatePageControls();
   setExportStatus("");
@@ -797,6 +1546,19 @@ function getRenderedTextLines(element) {
 }
 
 function getPageTextLines(page) {
+  if (LAYOUT_ENGINE) {
+    const preset = getLayoutPreset(page);
+    const copy = preset.copy;
+    const measure = elements.exportMeasureTitle.parentElement;
+    measure.style.width = `${copy.width}px`;
+    measure.style.textAlign = copy.align;
+    elements.exportMeasureTitle.style.fontSize = `${
+      PRODUCT.copy.title.fontSize * copy.titleScale
+    }px`;
+    elements.exportMeasureSubtitle.style.fontSize = `${
+      PRODUCT.copy.subtitle.fontSize * copy.subtitleScale
+    }px`;
+  }
   elements.exportMeasureTitle.textContent = page.title;
   elements.exportMeasureSubtitle.textContent = page.subtitle;
 
@@ -918,6 +1680,317 @@ function drawPoster(context, snapshot, screenshotImage, frameImage) {
   });
 }
 
+function fillCompositionBackground(context, theme) {
+  if (theme.background.type === "solid") {
+    context.fillStyle = theme.background.color;
+  } else {
+    const gradient = context.createLinearGradient(0, 0, ARTBOARD.width, ARTBOARD.height);
+    theme.background.stops.forEach(([position, color]) => gradient.addColorStop(position, color));
+    context.fillStyle = gradient;
+  }
+  context.fillRect(0, 0, ARTBOARD.width, ARTBOARD.height);
+}
+
+function drawCompositionShadow(context, x, y, width, height, radius, color) {
+  context.save();
+  context.fillStyle = color;
+  context.globalAlpha = 0.72;
+  context.shadowColor = color;
+  context.shadowBlur = 64;
+  context.shadowOffsetY = 42;
+  roundedRectPath(context, x, y, width, height, radius);
+  context.fill();
+  context.restore();
+}
+
+function drawCompositionDevice(
+  context,
+  node,
+  screenshotImage,
+  frameImage,
+  geometry,
+  fit,
+  theme,
+) {
+  const deviceScale = node.width / geometry.frameWidth;
+  const deviceHeight = geometry.frameHeight * deviceScale;
+  const deviceX = -node.width / 2;
+  const screenX = deviceX + geometry.screenX * deviceScale;
+  const screenY = geometry.screenY * deviceScale;
+  const screenWidth = geometry.screenWidth * deviceScale;
+  const screenHeight = geometry.screenHeight * deviceScale;
+
+  context.save();
+  context.translate(node.cx, node.top);
+  context.rotate((node.rotation * Math.PI) / 180);
+  drawCompositionShadow(
+    context,
+    deviceX + node.width * 0.05,
+    deviceHeight * 0.03,
+    node.width * 0.9,
+    deviceHeight * 0.95,
+    node.width * 0.12,
+    theme.shadowColor,
+  );
+
+  context.save();
+  roundedRectPath(
+    context,
+    screenX,
+    screenY,
+    screenWidth,
+    screenHeight,
+    geometry.screenRadius * deviceScale,
+  );
+  context.clip();
+  context.fillStyle = "#f2f4f5";
+  context.fillRect(screenX, screenY, screenWidth, screenHeight);
+  drawImageWithFit(
+    context,
+    screenshotImage,
+    screenX,
+    screenY,
+    screenWidth,
+    screenHeight,
+    fit,
+  );
+  context.restore();
+  context.drawImage(frameImage, deviceX, 0, node.width, deviceHeight);
+  context.restore();
+}
+
+function drawCompositionCard(context, node, screenshotImage, fit, theme) {
+  const width = node.width;
+  const height = width * (ARTBOARD.height / ARTBOARD.width);
+  const x = -width / 2;
+  const radius = Math.max(36, width * 0.105);
+
+  context.save();
+  context.translate(node.cx, node.top);
+  context.rotate((node.rotation * Math.PI) / 180);
+  drawCompositionShadow(context, x, 0, width, height, radius, theme.shadowColor);
+  context.save();
+  roundedRectPath(context, x, 0, width, height, radius);
+  context.clip();
+  context.fillStyle = "#f2f4f5";
+  context.fillRect(x, 0, width, height);
+  drawImageWithFit(context, screenshotImage, x, 0, width, height, fit);
+  context.restore();
+  context.lineWidth = 3;
+  context.strokeStyle = "rgba(255, 255, 255, 0.68)";
+  roundedRectPath(context, x, 0, width, height, radius);
+  context.stroke();
+  context.restore();
+}
+
+function drawFocusLens(context, lens, screenshotImage, theme) {
+  const radius = lens.diameter / 2;
+  const cropSize = Math.min(screenshotImage.naturalWidth, screenshotImage.naturalHeight) / lens.zoom;
+  const maxSourceX = Math.max(0, screenshotImage.naturalWidth - cropSize);
+  const maxSourceY = Math.max(0, screenshotImage.naturalHeight - cropSize);
+  const sourceX = Math.min(
+    maxSourceX,
+    Math.max(0, screenshotImage.naturalWidth * lens.focusX - cropSize / 2),
+  );
+  const sourceY = Math.min(
+    maxSourceY,
+    Math.max(0, screenshotImage.naturalHeight * lens.focusY - cropSize / 2),
+  );
+
+  context.save();
+  context.fillStyle = theme.shadowColor;
+  context.shadowColor = theme.shadowColor;
+  context.shadowBlur = 72;
+  context.shadowOffsetY = 34;
+  context.beginPath();
+  context.arc(lens.cx, lens.cy, radius, 0, Math.PI * 2);
+  context.fill();
+  context.restore();
+
+  context.save();
+  context.beginPath();
+  context.arc(lens.cx, lens.cy, radius, 0, Math.PI * 2);
+  context.clip();
+  context.drawImage(
+    screenshotImage,
+    sourceX,
+    sourceY,
+    cropSize,
+    cropSize,
+    lens.cx - radius,
+    lens.cy - radius,
+    lens.diameter,
+    lens.diameter,
+  );
+  context.restore();
+  context.lineWidth = 10;
+  context.strokeStyle = theme.lensBorder;
+  context.beginPath();
+  context.arc(lens.cx, lens.cy, radius - 5, 0, Math.PI * 2);
+  context.stroke();
+}
+
+function drawAlignedSpacedText(context, text, x, baseline, letterSpacing, align) {
+  if (align === "center") {
+    drawCenteredText(context, text, x, baseline, letterSpacing);
+    return;
+  }
+
+  if ("letterSpacing" in context) {
+    context.letterSpacing = `${letterSpacing}px`;
+    context.textAlign = align;
+    context.fillText(text, x, baseline);
+    context.letterSpacing = "0px";
+    return;
+  }
+
+  context.textAlign = "left";
+  let cursorX = x;
+  for (const character of Array.from(text)) {
+    context.fillText(character, cursorX, baseline);
+    cursorX += context.measureText(character).width + letterSpacing;
+  }
+}
+
+function drawCompositionTextBlock(
+  context,
+  { lines, top, left, width, align, font, fontSize, lineHeight, letterSpacing, color },
+) {
+  if (lines.length === 0) return 0;
+  context.font = font;
+  context.fillStyle = color;
+  context.textBaseline = "alphabetic";
+  const metrics = context.measureText("国Ag");
+  const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
+  const descent = metrics.actualBoundingBoxDescent || fontSize * 0.2;
+  const baselineOffset = (lineHeight - ascent - descent) / 2 + ascent;
+  const x = align === "center" ? left + width / 2 : left;
+
+  lines.forEach((line, index) => {
+    drawAlignedSpacedText(
+      context,
+      line,
+      x,
+      top + index * lineHeight + baselineOffset,
+      letterSpacing,
+      align,
+    );
+  });
+  return lines.length * lineHeight;
+}
+
+function drawCompositionAnnotations(context, snapshot, scene, theme) {
+  if (!snapshot.annotations.enabled || !scene.annotations) return;
+  const fontFamily = '"PingFang SC", "SF Pro Text", "Helvetica Neue", Arial, sans-serif';
+
+  if (scene.annotations.connector) {
+    const connector = scene.annotations.connector;
+    context.save();
+    context.fillStyle = theme.accentColor;
+    context.shadowColor = theme.accentColor;
+    context.shadowBlur = 42;
+    context.globalAlpha = 0.96;
+    context.beginPath();
+    context.arc(connector.cx, connector.cy, connector.size / 2, 0, Math.PI * 2);
+    context.fill();
+    context.restore();
+    context.fillStyle = "#ffffff";
+    context.font = `500 ${connector.size * 0.56}px ${fontFamily}`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText("→", connector.cx, connector.cy + connector.size * 0.015);
+  }
+
+  scene.annotations.labels.forEach((position, index) => {
+    const label = snapshot.annotations.labels[index] ?? "";
+    const availableWidth = Math.max(0, position.width - 80);
+    context.font = `640 38px ${fontFamily}`;
+    if (label && context.measureText(label).width > availableWidth) {
+      throw new Error(`步骤 ${index + 1} 标签过长，请缩短后再导出`);
+    }
+    const left = position.cx - position.width / 2;
+    const circleX = left + 32;
+    const circleY = position.top + 32;
+    context.fillStyle = theme.annotationSurface;
+    context.beginPath();
+    context.arc(circleX, circleY, 32, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = theme.annotationText;
+    context.font = `600 28px ${fontFamily}`;
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(index + 1).padStart(2, "0"), circleX, circleY + 1);
+    if (label) {
+      context.fillStyle = theme.subtitleColor;
+      context.font = `640 38px ${fontFamily}`;
+      context.textAlign = "left";
+      context.fillText(label, left + 80, circleY + 1);
+    }
+  });
+}
+
+function drawCompositionPoster(context, snapshot, screenshotImages, frameImage) {
+  const theme = LAYOUT_ENGINE.THEMES[snapshot.themeId];
+  const scene = LAYOUT_ENGINE.resolveComposition({
+    layoutId: snapshot.layoutId,
+    tuning: snapshot.layoutTuning,
+    classicDeviceWidth: snapshot.deviceWidth,
+    classicDeviceTop: snapshot.deviceTop,
+  });
+  const frame = FRAMES.find((item) => item.id === snapshot.frame) ?? FRAMES[0];
+  const geometry = MODEL_GEOMETRY[frame.model];
+  fillCompositionBackground(context, theme);
+
+  scene.nodes.forEach((node) => {
+    const screenshotImage = screenshotImages[node.slot];
+    const slot = snapshot.slots[node.slot];
+    if (node.type === "card") {
+      drawCompositionCard(context, node, screenshotImage, slot.fit, theme);
+    } else {
+      drawCompositionDevice(
+        context,
+        node,
+        screenshotImage,
+        frameImage,
+        geometry,
+        slot.fit,
+        theme,
+      );
+    }
+  });
+
+  if (scene.lens) drawFocusLens(context, scene.lens, screenshotImages[0], theme);
+  drawCompositionAnnotations(context, snapshot, scene, theme);
+
+  const copy = scene.copy;
+  const titleSize = PRODUCT.copy.title.fontSize * copy.titleScale;
+  const subtitleSize = PRODUCT.copy.subtitle.fontSize * copy.subtitleScale;
+  const titleHeight = drawCompositionTextBlock(context, {
+    lines: snapshot.titleLines,
+    top: copy.top,
+    left: copy.left,
+    width: copy.width,
+    align: copy.align,
+    font: `${PRODUCT.copy.title.fontWeight} ${titleSize}px ${PRODUCT.copy.title.fontFamily}`,
+    fontSize: titleSize,
+    lineHeight: titleSize * PRODUCT.copy.title.lineHeight,
+    letterSpacing: PRODUCT.copy.title.letterSpacing,
+    color: theme.titleColor,
+  });
+  drawCompositionTextBlock(context, {
+    lines: snapshot.subtitleLines,
+    top: copy.top + titleHeight + PRODUCT.copy.gap,
+    left: copy.left,
+    width: copy.width,
+    align: copy.align,
+    font: `${PRODUCT.copy.subtitle.fontWeight} ${subtitleSize}px ${PRODUCT.copy.subtitle.fontFamily}`,
+    fontSize: subtitleSize,
+    lineHeight: subtitleSize * PRODUCT.copy.subtitle.lineHeight,
+    letterSpacing: PRODUCT.copy.subtitle.letterSpacing,
+    color: theme.subtitleColor,
+  });
+}
+
 function canvasToPngBlob(canvas) {
   return new Promise((resolve, reject) => {
     try {
@@ -984,10 +2057,11 @@ function setExportStatus(message, isError = false) {
 
 function createRenderSnapshot(page) {
   const textLines = getPageTextLines(page);
+  const slots = resolvePageSlots(page);
 
   return Object.freeze({
     id: page.id,
-    pageIndex: state.pages.findIndex((item) => item.id === page.id),
+    pageIndex: getOutputPages().findIndex((item) => item.id === page.id),
     screenshot: page.screenshot,
     screenshotName: page.screenshotName,
     fit: page.fit,
@@ -996,6 +2070,20 @@ function createRenderSnapshot(page) {
     deviceTop: state.deviceTop,
     titleLines: textLines.title,
     subtitleLines: textLines.subtitle,
+    layoutId: LAYOUT_ENGINE ? LAYOUT_ENGINE.normalizeLayoutId(page.layoutId) : "classic",
+    themeId: LAYOUT_ENGINE ? LAYOUT_ENGINE.normalizeThemeId(state.themeId) : null,
+    layoutTuning: LAYOUT_ENGINE ? LAYOUT_ENGINE.normalizeTuning(page.layoutTuning) : null,
+    annotations: LAYOUT_ENGINE
+      ? {
+          enabled: page.annotations.enabled,
+          labels: [...page.annotations.labels],
+        }
+      : { enabled: false, labels: [] },
+    slots: slots.map((slot) => ({
+      screenshot: slot?.screenshot ?? null,
+      screenshotName: slot?.screenshotName ?? "截图",
+      fit: slot?.fit ?? DEFAULTS.fit,
+    })),
   });
 }
 
@@ -1012,10 +2100,21 @@ function createExportCanvas() {
   return { canvas, context };
 }
 
-async function renderSnapshotToBlob(snapshot, canvas, context, frameImage) {
-  const screenshotImage = await loadImage(snapshot.screenshot, snapshot.screenshotName);
+async function renderSnapshotToBlob(snapshot, canvas, context, frameImage, imageCache) {
+  const loadCachedImage = (source, label) => {
+    if (!imageCache.has(source)) imageCache.set(source, loadImage(source, label));
+    return imageCache.get(source);
+  };
   context.clearRect(0, 0, ARTBOARD.width, ARTBOARD.height);
-  drawPoster(context, snapshot, screenshotImage, frameImage);
+  if (!LAYOUT_ENGINE || (snapshot.layoutId === "classic" && snapshot.themeId === "porcelain")) {
+    const screenshotImage = await loadCachedImage(snapshot.screenshot, snapshot.screenshotName);
+    drawPoster(context, snapshot, screenshotImage, frameImage);
+  } else {
+    const screenshotImages = await Promise.all(
+      snapshot.slots.map((slot) => loadCachedImage(slot.screenshot, slot.screenshotName)),
+    );
+    drawCompositionPoster(context, snapshot, screenshotImages, frameImage);
+  }
   return canvasToPngBlob(canvas);
 }
 
@@ -1026,8 +2125,10 @@ async function exportPages(pageIds, mode) {
     .map((pageId) => state.pages.find((page) => page.id === pageId))
     .filter(Boolean);
   if (pages.length === 0) return;
-  if (pages.some((page) => !page.screenshot)) {
-    setExportStatus("请先添加要导出的应用截图。", true);
+  const invalidPage = pages.find((page) => !getPageLayoutValidation(page).valid);
+  if (invalidPage) {
+    const validation = getPageLayoutValidation(invalidPage);
+    setExportStatus(`无法导出：${validation.errors.join("；")}`, true);
     return;
   }
 
@@ -1045,11 +2146,12 @@ async function exportPages(pageIds, mode) {
     const selectedFrame = FRAMES.find((item) => item.id === snapshots[0].frame) ?? FRAMES[0];
     const frameImage = await loadImage(selectedFrame.src, PRODUCT.frameLoadLabel);
     const { canvas, context } = createExportCanvas();
+    const imageCache = new Map();
     const downloads = [];
 
     for (const [index, snapshot] of snapshots.entries()) {
       setExportStatus(`正在生成 ${index + 1} / ${snapshots.length}…`);
-      const blob = await renderSnapshotToBlob(snapshot, canvas, context, frameImage);
+      const blob = await renderSnapshotToBlob(snapshot, canvas, context, frameImage, imageCache);
       downloads.push({ blob, fileName: getExportFileName(snapshot) });
     }
 
@@ -1080,7 +2182,7 @@ function exportCurrentPoster() {
 
 function exportAllPosters() {
   return exportPages(
-    state.pages.map((page) => page.id),
+    getOutputPages().map((page) => page.id),
     "all",
   );
 }
@@ -1103,6 +2205,7 @@ async function createUploadedPage(file, templatePage) {
       imageWidth: image.naturalWidth,
       imageHeight: image.naturalHeight,
       objectUrl,
+      imageState: "ready",
     });
   } catch (error) {
     URL.revokeObjectURL(objectUrl);
@@ -1183,6 +2286,7 @@ function resetState() {
   releaseAllPages();
   const defaultPage = createDefaultPage();
   state.frame = DEFAULTS.frame;
+  if (LAYOUT_ENGINE) state.themeId = "porcelain";
   state.deviceWidth = DEFAULTS.deviceWidth;
   state.deviceTop = DEFAULTS.deviceTop;
   state.pages = [defaultPage];
@@ -1210,6 +2314,8 @@ function moveActivePage(offset) {
 
   const [page] = state.pages.splice(currentIndex, 1);
   state.pages.splice(targetIndex, 0, page);
+  applyComposition();
+  renderLayoutEditor();
   renderScreenshotList();
   updatePageControls();
   setScreenshotStatus(`已将当前截图移至第 ${targetIndex + 1} 张。`);
@@ -1252,16 +2358,21 @@ function bindEvents() {
     const page = getActivePage();
     page.title = event.target.value;
     elements.posterTitle.textContent = page.title;
+    updatePageControls();
+    updateRenderState();
   });
 
   elements.subtitleInput.addEventListener("input", (event) => {
     const page = getActivePage();
     page.subtitle = event.target.value;
     elements.posterSubtitle.textContent = page.subtitle;
+    updatePageControls();
+    updateRenderState();
   });
 
   elements.frameSelect.addEventListener("change", (event) => {
     applyFrame(event.target.value);
+    applyComposition();
   });
 
   elements.screenshotInput.addEventListener("change", (event) => {
@@ -1274,6 +2385,7 @@ function bindEvents() {
     const page = getActivePage();
     page.fit = event.target.value;
     elements.screenshotImage.style.objectFit = page.fit;
+    applyComposition();
   });
 
   elements.screenshotList.addEventListener("click", (event) => {
@@ -1296,6 +2408,94 @@ function bindEvents() {
     applyLayout();
   });
 
+  elements.layoutGallery?.addEventListener("click", (event) => {
+    const button = event.target.closest(".layout-card");
+    if (!button || isImporting || isExporting) return;
+    const page = getActivePage();
+    page.layoutId = LAYOUT_ENGINE.normalizeLayoutId(button.dataset.layoutId);
+    page.layoutTuning = LAYOUT_ENGINE.normalizeTuning();
+    page.annotationOverflow = false;
+    applyComposition(page);
+    renderLayoutEditor(page);
+    updatePageControls();
+    setExportStatus("");
+  });
+
+  elements.themeOptions?.addEventListener("click", (event) => {
+    const button = event.target.closest(".theme-option");
+    if (!button || isImporting || isExporting) return;
+    state.themeId = LAYOUT_ENGINE.normalizeThemeId(button.dataset.themeId);
+    applyTheme();
+    applyComposition();
+    renderLayoutEditor();
+    setExportStatus("");
+  });
+
+  elements.slotAssignments?.addEventListener("change", (event) => {
+    const select = event.target.closest("select[data-slot-index]");
+    if (!select) return;
+    const page = getActivePage();
+    const slot = Number(select.dataset.slotIndex);
+    if (select.value) page.slotOverrides[slot] = select.value;
+    else delete page.slotOverrides[slot];
+    applyComposition(page);
+    renderLayoutEditor(page);
+    updatePageControls();
+    setExportStatus("");
+  });
+
+  elements.annotationsToggle?.addEventListener("change", (event) => {
+    const page = getActivePage();
+    page.annotations.enabled = event.target.checked;
+    page.annotationOverflow = false;
+    applyComposition(page);
+    renderLayoutEditor(page);
+    updatePageControls();
+  });
+
+  elements.annotationFields?.addEventListener("input", (event) => {
+    const input = event.target.closest("input[data-annotation-index]");
+    if (!input) return;
+    const page = getActivePage();
+    page.annotations.labels[Number(input.dataset.annotationIndex)] = input.value.replace(
+      /[\r\n]+/g,
+      " ",
+    );
+    applyComposition(page);
+    updatePageControls();
+  });
+
+  const tuningBindings = [
+    [elements.layoutScaleInput, "scale"],
+    [elements.layoutYInput, "y"],
+    [elements.layoutSpreadInput, "spread"],
+    [elements.layoutTiltInput, "tilt"],
+    [elements.focusXInput, "focusX"],
+    [elements.focusYInput, "focusY"],
+  ];
+  tuningBindings.forEach(([input, key]) => {
+    input?.addEventListener("input", (event) => {
+      const page = getActivePage();
+      page.layoutTuning = LAYOUT_ENGINE.normalizeTuning({
+        ...page.layoutTuning,
+        [key]: Number(event.target.value),
+      });
+      applyComposition(page);
+      renderTuningControls(page, getLayoutPreset(page));
+      updatePageControls();
+    });
+  });
+
+  elements.resetLayoutButton?.addEventListener("click", () => {
+    const page = getActivePage();
+    page.layoutTuning = LAYOUT_ENGINE.normalizeTuning();
+    page.annotationOverflow = false;
+    applyComposition(page);
+    renderLayoutEditor(page);
+    updatePageControls();
+    setExportStatus("");
+  });
+
   elements.resetButton.addEventListener("click", resetState);
   elements.focusButton.addEventListener("click", () => toggleFocusMode());
   elements.exportButton.addEventListener("click", exportCurrentPoster);
@@ -1311,9 +2511,14 @@ function bindEvents() {
 }
 
 function initialize() {
-  if (isRenderMode) document.body.classList.add("render-mode");
+  if (isRenderMode) {
+    document.body.classList.add("render-mode");
+    if (LAYOUT_ENGINE) document.body.dataset.renderState = "loading";
+  }
   applyProductConfiguration();
   populateFrameSelect();
+  populateLayoutGallery();
+  populateThemeOptions();
   applyState();
   bindEvents();
   resizePreview();
