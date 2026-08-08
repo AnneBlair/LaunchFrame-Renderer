@@ -14,6 +14,7 @@ LaunchFrame Renderer is a zero-dependency HTML tool for creating App Store promo
 - Choose one of nine iPhone layouts per poster: Classic Hero, Editorial Shift, Focus Lens, Duo Flow, Duo Compare, Depth Stack, Arc Fan, Step Cascade, or Card Gallery
 - Share one iPhone device frame and one of four curated themes—Porcelain, Midnight, Aurora, or Electric—across the set
 - Automatically fill up to three screenshot slots from the poster order, with stable manual overrides
+- Drag screenshots directly between multi-screen frames to swap them, or drop a local image into a target frame
 - Safely tune scale, vertical offset, spread, and tilt, and add optional one-line step annotations
 - Choose from 15 portrait frames for iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max, and iPhone Air
 - Choose from four landscape Space Black or Silver frames for the 11-inch and 13-inch iPad Pro (M5)
@@ -58,7 +59,7 @@ After capturing screenshots from Xcode or Simulator, select one or more local im
 
 Click a thumbnail to edit that poster. The headline, supporting copy, screenshot fit mode, and iPhone layout are stored independently for each poster. The selected iPhone frame and theme are shared by the entire set.
 
-For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override each secondary slot manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
+For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override slots manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. You can also drag one preview image onto another to swap them, or drop a local image into a target frame; the local image is added to the screenshot set and assigned to that slot immediately. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
 
 The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls; Focus Lens also exposes horizontal and vertical focus controls. The iPad editor and its layout behavior are unchanged.
 

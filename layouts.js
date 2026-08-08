@@ -341,10 +341,10 @@
     if (activeIndex < 0) return Array.from({ length: slotCount }, () => null);
 
     const activePage = pages[activeIndex];
-    const resolved = [activePage];
-    const usedIds = new Set([activePage.id]);
+    const resolved = [];
+    const usedIds = new Set();
 
-    for (let slot = 1; slot < slotCount; slot += 1) {
+    for (let slot = 0; slot < slotCount; slot += 1) {
       const overrideId = slotOverrides[slot];
       const overridePage = pages.find(
         (page) => page.id === overrideId && !usedIds.has(page.id) && page.screenshot,
@@ -353,6 +353,12 @@
       if (overridePage) {
         resolved.push(overridePage);
         usedIds.add(overridePage.id);
+        continue;
+      }
+
+      if (slot === 0) {
+        resolved.push(activePage);
+        usedIds.add(activePage.id);
         continue;
       }
 

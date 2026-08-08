@@ -344,6 +344,7 @@ const isRenderMode = params.get("render") === "1";
 let nextPageId = 1;
 let isImporting = false;
 let isExporting = false;
+let compositionPointerDrag = null;
 
 function createPage({
   title,
@@ -711,6 +712,22 @@ function createCompositionPlaceholder(message) {
   return placeholder;
 }
 
+function decorateCompositionSlot(wrapper, node, slotPage) {
+  wrapper.classList.add("composition-slot");
+  wrapper.dataset.slotIndex = String(node.slot);
+  if (slotPage?.id) wrapper.dataset.pageId = slotPage.id;
+  wrapper.dataset.hasScreenshot = String(Boolean(slotPage?.screenshot));
+  wrapper.title = slotPage?.screenshot
+    ? `图 ${node.slot + 1}：${slotPage.screenshotName}；拖动可与其他图片交换`
+    : `图 ${node.slot + 1}：可将本地图片拖入此处`;
+
+  const badge = document.createElement("span");
+  badge.className = "composition-slot-badge";
+  badge.setAttribute("aria-hidden", "true");
+  badge.textContent = `图 ${node.slot + 1}`;
+  wrapper.append(badge);
+}
+
 function trackCompositionImage(image, page, placeholder) {
   if (!page?.screenshot) return;
   page.imageState = page.imageState === "ready" ? "ready" : "loading";
@@ -757,6 +774,7 @@ function createDeviceNode(node, slotPage, frame, geometry) {
   )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
 
   const screenshot = document.createElement("img");
+  screenshot.draggable = false;
   screenshot.style.objectFit = slotPage?.fit ?? DEFAULTS.fit;
   const placeholder = createCompositionPlaceholder(
     slotPage?.screenshot ? "正在读取截图" : `缺少第 ${node.slot + 1} 张截图`,
@@ -767,6 +785,7 @@ function createDeviceNode(node, slotPage, frame, geometry) {
   const frameImage = document.createElement("img");
   frameImage.className = "composition-frame";
   frameImage.alt = "";
+  frameImage.draggable = false;
   frameImage.onload = () => {
     delete frameImage.dataset.loadError;
     updateRenderState();
@@ -777,6 +796,7 @@ function createDeviceNode(node, slotPage, frame, geometry) {
   };
   frameImage.src = frame.src;
   wrapper.append(screen, frameImage);
+  decorateCompositionSlot(wrapper, node, slotPage);
   return wrapper;
 }
 
@@ -791,12 +811,14 @@ function createCardNode(node, slotPage) {
   wrapper.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
 
   const screenshot = document.createElement("img");
+  screenshot.draggable = false;
   screenshot.style.objectFit = slotPage?.fit ?? DEFAULTS.fit;
   const placeholder = createCompositionPlaceholder(
     slotPage?.screenshot ? "正在读取截图" : `缺少第 ${node.slot + 1} 张截图`,
   );
   wrapper.append(screenshot, placeholder);
   if (slotPage?.screenshot) trackCompositionImage(screenshot, slotPage, placeholder);
+  decorateCompositionSlot(wrapper, node, slotPage);
   return wrapper;
 }
 
@@ -1113,10 +1135,19 @@ function renderSlotAssignments(page, preset, slots) {
 
   const existingIds = new Set(state.pages.map((item) => item.id));
   Object.keys(page.slotOverrides).forEach((slot) => {
-    if (!existingIds.has(page.slotOverrides[slot])) delete page.slotOverrides[slot];
+    if (
+      !existingIds.has(page.slotOverrides[slot]) ||
+      (Number(slot) === 0 && page.slotOverrides[slot] === page.id)
+    ) {
+      delete page.slotOverrides[slot];
+    }
   });
 
-  for (let slot = 1; slot < preset.slotCount; slot += 1) {
+  for (let slot = 0; slot < preset.slotCount; slot += 1) {
+    if (page.slotOverrides[slot] && slots[slot]?.id !== page.slotOverrides[slot]) {
+      delete page.slotOverrides[slot];
+    }
+
     const field = document.createElement("label");
     field.className = "slot-field";
     field.textContent = `第 ${slot + 1} 屏`;
@@ -1125,18 +1156,21 @@ function renderSlotAssignments(page, preset, slots) {
 
     const automatic = document.createElement("option");
     automatic.value = "";
-    automatic.textContent = slots[slot]
-      ? `自动 · ${slots[slot].screenshotName}`
-      : "自动 · 暂无可用截图";
+    automatic.textContent =
+      slot === 0
+        ? `当前 · ${page.screenshotName}`
+        : slots[slot]
+          ? `自动 · ${slots[slot].screenshotName}`
+          : "自动 · 暂无可用截图";
     select.append(automatic);
 
     const usedByOtherSlots = new Set(
-      Object.entries(page.slotOverrides)
-        .filter(([index]) => Number(index) !== slot)
-        .map(([, pageId]) => pageId),
+      slots
+        .filter((slotPage, index) => index !== slot && slotPage)
+        .map((slotPage) => slotPage.id),
     );
     state.pages.forEach((candidate) => {
-      if (candidate.id === page.id || candidate.isAuxiliary) return;
+      if (candidate.isAuxiliary || (slot === 0 && candidate.id === page.id)) return;
       const option = document.createElement("option");
       option.value = candidate.id;
       option.textContent = candidate.screenshotName;
@@ -1152,7 +1186,7 @@ function renderSlotAssignments(page, preset, slots) {
   const missingError = validation.errors.find((error) => error.includes("槽位为空"));
   elements.slotAssignmentHint.textContent = missingError
     ? `${missingError}；添加截图或手动选择后才能导出。`
-    : "默认按当前顺序自动取后续截图；手动选择会在重新排序后保留。";
+    : "可在预览中拖动图片互换，或将本地图片拖入边框；下拉选择仍可精确指定。";
   elements.slotAssignmentHint.classList.toggle("is-error", Boolean(missingError));
 }
 
@@ -2274,6 +2308,113 @@ async function importScreenshots(fileList) {
   }
 }
 
+function setCompositionSlotAssignment(page, slotIndex, slotPage) {
+  if (slotIndex === 0 && slotPage.id === page.id) {
+    delete page.slotOverrides[0];
+    return;
+  }
+  page.slotOverrides[slotIndex] = slotPage.id;
+}
+
+function swapCompositionSlots(sourceSlot, targetSlot) {
+  if (isImporting || isExporting || sourceSlot === targetSlot) return;
+
+  const page = getActivePage();
+  const preset = getLayoutPreset(page);
+  if (
+    !Number.isInteger(sourceSlot) ||
+    !Number.isInteger(targetSlot) ||
+    sourceSlot < 0 ||
+    targetSlot < 0 ||
+    sourceSlot >= preset.slotCount ||
+    targetSlot >= preset.slotCount
+  ) {
+    return;
+  }
+
+  const slots = resolvePageSlots(page);
+  const sourcePage = slots[sourceSlot];
+  const targetPage = slots[targetSlot];
+  if (!sourcePage?.screenshot || !targetPage?.screenshot) {
+    setScreenshotStatus("无法交换：请先为两个边框都填入图片。", true);
+    return;
+  }
+
+  setCompositionSlotAssignment(page, sourceSlot, targetPage);
+  setCompositionSlotAssignment(page, targetSlot, sourcePage);
+  applyComposition(page);
+  renderLayoutEditor(page);
+  updatePageControls();
+  setScreenshotStatus(`已交换图 ${sourceSlot + 1} 与图 ${targetSlot + 1}。`);
+  setExportStatus("");
+}
+
+async function fillCompositionSlotFromFiles(fileList, targetSlot) {
+  const files = Array.from(fileList);
+  if (isImporting || isExporting || files.length === 0) return;
+  if (files.length !== 1) {
+    setScreenshotStatus("一次请只拖入 1 张图片。", true);
+    return;
+  }
+
+  const file = files[0];
+  if (!isSupportedImageFile(file)) {
+    setScreenshotStatus(`未填入：${file.name} 不是支持的图片格式。`, true);
+    return;
+  }
+
+  const page = getActivePage();
+  const preset = getLayoutPreset(page);
+  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= preset.slotCount) return;
+  if (getOutputPages().length >= MAX_SCREENSHOTS) {
+    setScreenshotStatus(`未填入：截图组最多 ${MAX_SCREENSHOTS} 张。`, true);
+    return;
+  }
+
+  isImporting = true;
+  setScreenshotStatus(`正在将 ${file.name} 填入图 ${targetSlot + 1}…`);
+  renderScreenshotList();
+  updatePageControls();
+
+  let importedPage = null;
+  try {
+    importedPage = await createUploadedPage(file, { ...page });
+    state.pages.push(importedPage);
+    setCompositionSlotAssignment(page, targetSlot, importedPage);
+  } catch (error) {
+    setScreenshotStatus(`未填入：${error.message}`, true);
+  } finally {
+    isImporting = false;
+  }
+
+  if (importedPage) {
+    applyComposition(page);
+    renderLayoutEditor(page);
+    setScreenshotStatus(`已将 ${file.name} 填入图 ${targetSlot + 1}，并添加到截图组。`);
+    setExportStatus("");
+  }
+  renderScreenshotList();
+  updatePageControls();
+}
+
+function dataTransferHasFiles(dataTransfer) {
+  return Array.from(dataTransfer?.types ?? []).includes("Files");
+}
+
+function clearCompositionDropTargets() {
+  elements.compositionLayer
+    ?.querySelectorAll(".composition-slot.is-drop-target")
+    .forEach((slot) => slot.classList.remove("is-drop-target"));
+}
+
+function clearCompositionDragState() {
+  elements.compositionLayer
+    ?.querySelectorAll(".composition-slot.is-drag-source")
+    .forEach((slot) => slot.classList.remove("is-drag-source"));
+  clearCompositionDropTargets();
+  compositionPointerDrag = null;
+}
+
 function resetState() {
   const hasUserScreenshots = state.pages.some((page) => !page.isSample);
   if (
@@ -2394,6 +2535,132 @@ function bindEvents() {
     selectPage(button.dataset.pageId, { focus: true });
   });
 
+  elements.compositionLayer?.addEventListener("pointerdown", (event) => {
+    const slot = event.target.closest(".composition-slot[data-slot-index]");
+    if (
+      !slot ||
+      isImporting ||
+      isExporting ||
+      event.button !== 0 ||
+      slot.dataset.hasScreenshot !== "true"
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    compositionPointerDrag = {
+      pointerId: event.pointerId,
+      sourceSlot: Number(slot.dataset.slotIndex),
+      sourceElement: slot,
+      startX: event.clientX,
+      startY: event.clientY,
+      hasMoved: false,
+    };
+    slot.setPointerCapture?.(event.pointerId);
+  });
+
+  elements.compositionLayer?.addEventListener("pointermove", (event) => {
+    const drag = compositionPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
+    if (!drag.hasMoved && distance < 8) {
+      return;
+    }
+
+    drag.hasMoved = true;
+    drag.sourceElement.classList.add("is-drag-source");
+    clearCompositionDropTargets();
+    document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest?.(".composition-slot[data-slot-index]")
+      ?.classList.add("is-drop-target");
+  });
+
+  const finishCompositionPointerDrag = (event, shouldSwap) => {
+    const drag = compositionPointerDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const target = document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest?.(".composition-slot[data-slot-index]");
+    const targetSlot = target ? Number(target.dataset.slotIndex) : null;
+    if (drag.sourceElement.hasPointerCapture?.(event.pointerId)) {
+      drag.sourceElement.releasePointerCapture(event.pointerId);
+    }
+    const sourceSlot = drag.sourceSlot;
+    const didMove = drag.hasMoved;
+    clearCompositionDragState();
+    if (shouldSwap && didMove && targetSlot !== null) {
+      swapCompositionSlots(sourceSlot, targetSlot);
+    }
+  };
+
+  elements.compositionLayer?.addEventListener("pointerup", (event) => {
+    finishCompositionPointerDrag(event, true);
+  });
+
+  elements.compositionLayer?.addEventListener("pointercancel", (event) => {
+    finishCompositionPointerDrag(event, false);
+  });
+
+  elements.compositionLayer?.addEventListener("dragover", (event) => {
+    const slot = event.target.closest(".composition-slot[data-slot-index]");
+    if (!slot || isImporting || isExporting || !dataTransferHasFiles(event.dataTransfer)) return;
+
+    event.preventDefault();
+    clearCompositionDropTargets();
+    slot.classList.add("is-drop-target");
+    event.dataTransfer.dropEffect = "copy";
+  });
+
+  elements.compositionLayer?.addEventListener("drop", (event) => {
+    const slot = event.target.closest(".composition-slot[data-slot-index]");
+    if (!slot || isImporting || isExporting) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const targetSlot = Number(slot.dataset.slotIndex);
+    const files = Array.from(event.dataTransfer?.files ?? []);
+    clearCompositionDragState();
+
+    if (files.length > 0 || dataTransferHasFiles(event.dataTransfer)) {
+      void fillCompositionSlotFromFiles(files, targetSlot);
+    }
+  });
+
+  elements.artboard.addEventListener("dragover", (event) => {
+    if (!LAYOUT_ENGINE || !dataTransferHasFiles(event.dataTransfer)) return;
+    event.preventDefault();
+    if (!event.target.closest(".composition-slot")) clearCompositionDropTargets();
+  });
+
+  elements.artboard.addEventListener("dragleave", (event) => {
+    const relatedTarget = event.relatedTarget;
+    if (!(relatedTarget instanceof Node) || !elements.artboard.contains(relatedTarget)) {
+      clearCompositionDropTargets();
+    }
+  });
+
+  elements.artboard.addEventListener("drop", (event) => {
+    if (
+      !LAYOUT_ENGINE ||
+      !dataTransferHasFiles(event.dataTransfer) ||
+      event.target.closest(".composition-slot")
+    ) {
+      return;
+    }
+    event.preventDefault();
+    clearCompositionDragState();
+    const preset = getLayoutPreset();
+    setScreenshotStatus(
+      preset?.slotCount > 1
+        ? "请将图片拖到目标真机边框内。"
+        : "请先选择多图排版，再将图片拖到目标真机边框内。",
+      true,
+    );
+  });
+
   elements.moveScreenshotPrevious.addEventListener("click", () => moveActivePage(-1));
   elements.moveScreenshotNext.addEventListener("click", () => moveActivePage(1));
   elements.deleteScreenshot.addEventListener("click", deleteActivePage);
@@ -2436,7 +2703,8 @@ function bindEvents() {
     if (!select) return;
     const page = getActivePage();
     const slot = Number(select.dataset.slotIndex);
-    if (select.value) page.slotOverrides[slot] = select.value;
+    const selectedPage = state.pages.find((candidate) => candidate.id === select.value);
+    if (selectedPage) setCompositionSlotAssignment(page, slot, selectedPage);
     else delete page.slotOverrides[slot];
     applyComposition(page);
     renderLayoutEditor(page);

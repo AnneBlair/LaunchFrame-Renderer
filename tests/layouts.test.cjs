@@ -71,6 +71,19 @@ test("manual slot overrides survive reordering and invalid overrides fall back",
   );
 });
 
+test("slot zero can be overridden so primary and secondary screens can swap", () => {
+  const pages = [page("a"), page("b"), page("c")];
+
+  assert.deepEqual(
+    resolveSlotPages(pages, "a", { 0: "b", 1: "a" }, 2).map((item) => item?.id),
+    ["b", "a"],
+  );
+  assert.deepEqual(
+    resolveSlotPages(pages, "a", { 0: "missing" }, 2).map((item) => item?.id),
+    ["a", "b"],
+  );
+});
+
 test("composition applies safe scale, spread, vertical shift, and tilt", () => {
   const scene = resolveComposition({
     layoutId: "duo-flow",
