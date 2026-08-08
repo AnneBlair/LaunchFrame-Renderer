@@ -12,13 +12,14 @@ LaunchFrame Renderer is a zero-dependency HTML tool for creating App Store promo
 - Edit the headline, supporting copy, and screenshot fit mode independently for each poster
 - Reorder or remove screenshots from the poster sequence
 - Choose one of nine iPhone layouts per poster: Classic Hero, Editorial Shift, Focus Lens, Duo Flow, Duo Compare, Depth Stack, Arc Fan, Step Cascade, or Card Gallery
-- Share one iPhone device frame and one of four curated themes—Porcelain, Midnight, Aurora, or Electric—across the set
+- Choose one of eight iPad layouts per poster: Classic Hero, Editorial Split, Panorama Stage, Detail Callout, Duo Flow, Compare Split, Master Detail, or Window Gallery
+- Share one device frame and one of four curated themes—Porcelain, Midnight, Aurora, or Electric—across each product set
 - Automatically fill up to three screenshot slots from the poster order, with stable manual overrides
 - Drag screenshots directly between multi-screen frames to swap them, or drop a local image into a target frame
-- Safely tune scale, vertical offset, spread, and tilt, and add optional one-line step annotations
+- Safely tune scale, vertical offset, spread, and tilt; mirror supported iPad compositions; and add optional one-line step annotations
 - Choose from 15 portrait frames for iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max, and iPhone Air
 - Choose from four landscape Space Black or Silver frames for the 11-inch and 13-inch iPad Pro (M5)
-- Start the iPad editor with a bundled `2360 × 1640` sample screenshot and the 11-inch frame
+- Start the iPad editor with a bundled `2360 × 1640` sample screenshot and the 13-inch Silver frame
 - Automatically match the closest 11-inch or 13-inch iPad frame from the first imported screenshot's aspect ratio
 - Adjust the device width and vertical position
 - Export an iPhone `1320 × 2868` or iPad `2732 × 2048` PNG
@@ -53,17 +54,17 @@ iPhone: http://localhost:4173/
 iPad:   http://localhost:4173/ipad.html
 ```
 
-The iPhone editor initially displays `assets/sample-screenshot.png`. The iPad editor initially displays `assets/sample-ipad-screenshot.png` in the 11-inch Space Black frame. Both entries are ready to preview and export immediately.
+The iPhone editor initially displays `assets/sample-screenshot.png`. The iPad editor initially displays `assets/sample-ipad-screenshot.png` in the 13-inch Silver frame. Both entries are ready to preview and export immediately.
 
 After capturing screenshots from Xcode or Simulator, select one or more local images to replace the corresponding sample. You can append more screenshots later, up to a total of 10.
 
-Click a thumbnail to edit that poster. The headline, supporting copy, screenshot fit mode, and iPhone layout are stored independently for each poster. The selected iPhone frame and theme are shared by the entire set.
+Click a thumbnail to edit that poster. The headline, supporting copy, screenshot fit mode, and layout are stored independently for each poster. The selected frame and theme are shared by the entire product set.
 
 For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override slots manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. You can also drag one preview image onto another to swap them, or drop a local image into a target frame; the local image is added to the screenshot set and assigned to that slot immediately. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
 
-The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls; Focus Lens also exposes horizontal and vertical focus controls. The iPad editor and its layout behavior are unchanged.
+The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls. iPhone Focus Lens and iPad Detail Callout also expose horizontal and vertical focus controls, and supported iPad layouts can be mirrored. Newly imported screenshots still start with Classic; the renderer never assigns a new layout automatically.
 
-The iPad editor defaults to **Stretch to fit** so the screenshot is neither cropped nor letterboxed. A slight aspect-ratio adjustment may occur when the screenshot and frame do not match exactly; **Cover** and **Contain** remain available.
+The iPad editor defaults to the 13-inch Silver frame and **Stretch to fit** so the screenshot is neither cropped nor letterboxed. A slight aspect-ratio adjustment may occur when the screenshot and frame do not match exactly; other frames, **Cover**, and **Contain** remain available.
 
 Use **Export Current PNG** to download the selected poster, or **Export All** to trigger one PNG download for each poster in the current order. Batch export does not create a ZIP file.
 
@@ -89,17 +90,18 @@ The render-only view supports the following query parameters:
 | `fit` | Screenshot fit mode: `fill`, `cover`, or `contain`; `fill` is iPad-only | `fit=fill` |
 | `deviceWidth` | Device width on the poster canvas | `deviceWidth=930` |
 | `deviceTop` | Distance from the top of the canvas to the device | `deviceTop=730` |
-| `layout` | iPhone layout ID; omitted or invalid values fall back to `classic` | `layout=duo-flow` |
-| `theme` | iPhone theme: `porcelain`, `midnight`, `aurora`, or `electric` | `theme=midnight` |
+| `layout` | Layout ID for the current product; omitted or invalid values fall back to `classic` | `layout=duo-flow` |
+| `theme` | Theme: `porcelain`, `midnight`, `aurora`, or `electric` | `theme=midnight` |
 | `screenshot2` / `screenshot3` | Accessible URLs for secondary layout slots | `screenshot2=./screens/result.png` |
-| `fit2` / `fit3` | `cover` or `contain` for secondary screenshots | `fit2=contain` |
-| `layoutScale` | New-layout scale in the `0.92–1.06` range | `layoutScale=1.02` |
-| `layoutY` | New-layout vertical offset in the `-120–120` range | `layoutY=40` |
-| `layoutSpread` | Multi-screen spread in the `0.85–1.15` range | `layoutSpread=1.08` |
+| `fit2` / `fit3` | Fit mode for secondary screenshots; iPad also accepts `fill` | `fit2=contain` |
+| `layoutScale` | New-layout scale: iPhone `0.92–1.06`; iPad `0.94–1.05` | `layoutScale=1.02` |
+| `layoutY` | New-layout vertical offset: iPhone `-120–120`; iPad `-80–80` | `layoutY=40` |
+| `layoutSpread` | Multi-screen spread: iPhone `0.85–1.15`; iPad `0.90–1.10` | `layoutSpread=1.08` |
 | `layoutTilt` | Tilt strength in the `0–1` range | `layoutTilt=0.8` |
+| `layoutMirror` | Set to `1` to mirror supported iPad compositions | `layoutMirror=1` |
 | `annotations` | Set to `1` to show the supported connector, numbers, and labels | `annotations=1` |
 | `annotation1`…`annotation3` | Up to three single-line step labels | `annotation1=Choose%20a%20source` |
-| `focusX` / `focusY` | Focus Lens position in the `0.2–0.8` range | `focusX=0.62` |
+| `focusX` / `focusY` | Focus Lens or Detail Callout position in the `0.2–0.8` range | `focusX=0.62` |
 
 A cross-origin `screenshot` URL must return CORS response headers that allow the renderer's origin to read the image. Same-origin images and local images selected through the editor are unaffected. When an iPad `frame` is omitted, the renderer matches one from the screenshot aspect ratio; an explicit `frame` parameter takes priority.
 
@@ -109,9 +111,12 @@ Example:
 http://localhost:4173/?render=1&frame=iphone-17-pro-max-deep-blue&deviceTop=730
 http://localhost:4173/?render=1&layout=duo-flow&theme=midnight&screenshot=./screens/input.png&screenshot2=./screens/result.png&annotations=1&annotation1=Choose%20a%20source&annotation2=Ready%20to%20learn
 http://localhost:4173/ipad.html?render=1&frame=ipad-pro-m5-13-space-black&screenshot=./screens/ipad-home.png
+http://localhost:4173/ipad.html?render=1&layout=master-detail&theme=aurora&frame=ipad-pro-m5-13-silver&screenshot=./screens/ipad-home.png&screenshot2=./screens/ipad-list.png&screenshot3=./screens/ipad-detail.png
 ```
 
-Supported `layout` values are `classic`, `editorial-shift`, `focus-lens`, `duo-flow`, `duo-compare`, `depth-stack`, `arc-fan`, `step-cascade`, and `card-gallery`. These new parameters affect iPhone only; iPad ignores them and preserves its existing behavior.
+iPhone `layout` values are `classic`, `editorial-shift`, `focus-lens`, `duo-flow`, `duo-compare`, `depth-stack`, `arc-fan`, `step-cascade`, and `card-gallery`.
+
+iPad `layout` values are `classic`, `editorial-split`, `panorama-stage`, `detail-callout`, `duo-flow`, `compare-split`, `master-detail`, and `window-gallery`. IDs that belong to the other product—or are unknown—fall back safely to `classic`. With no new parameters, both products keep using the original Classic rendering path.
 
 Render-only mode exposes `data-render-state="loading"`, `ready`, or `error` on `<body>`. Missing slots, unreadable images, copy entering the device safe area, and overflowing labels set `error` and provide a reason in `data-render-error`. Browser automation should wait for `ready` instead of silently capturing an invalid poster.
 

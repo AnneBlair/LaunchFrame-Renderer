@@ -11,7 +11,10 @@ const {
   resolveSlotPages,
   resolveComposition,
   validateComposition,
+  forProduct,
 } = require("../layouts.js");
+
+const ipadLayouts = forProduct("ipad");
 
 function page(id, screenshot = `${id}.png`) {
   return { id, screenshot, imageState: "ready" };
@@ -121,4 +124,85 @@ test("validation reports missing, failed, and overflowing content", () => {
     "第 3 个截图槽位为空",
     "步骤标签过长，请缩短后再导出",
   ]);
+});
+
+test("registers iPad classic plus seven guarded layouts", () => {
+  assert.deepEqual(ipadLayouts.ARTBOARD, { width: 2732, height: 2048 });
+  assert.equal(Object.keys(ipadLayouts.LAYOUT_PRESETS).length, 8);
+  assert.equal(Object.keys(ipadLayouts.THEMES).length, 4);
+
+  for (const preset of Object.values(ipadLayouts.LAYOUT_PRESETS)) {
+    assert.ok(preset.slotCount <= 3);
+    assert.ok(preset.nodes.filter((node) => node.type === "device").length <= 2);
+    assert.ok(preset.nodes.every((node) => Math.abs(node.rotation) <= 6));
+  }
+});
+
+test("iPad tuning has independent clamps and a normalized mirror switch", () => {
+  assert.deepEqual(
+    ipadLayouts.normalizeTuning({
+      scale: 2,
+      y: -500,
+      spread: 0,
+      tilt: 4,
+      focusX: -1,
+      focusY: 2,
+      mirror: "1",
+    }),
+    {
+      scale: 1.05,
+      y: -80,
+      spread: 0.9,
+      tilt: 1,
+      focusX: 0.2,
+      focusY: 0.8,
+      mirror: true,
+    },
+  );
+});
+
+test("iPad mirroring swaps side copy and scene geometry without flipping screenshots", () => {
+  const normal = ipadLayouts.resolveComposition({ layoutId: "editorial-split", tuning: {} });
+  const mirrored = ipadLayouts.resolveComposition({
+    layoutId: "editorial-split",
+    tuning: { mirror: true },
+  });
+
+  assert.equal(normal.copy.align, "left");
+  assert.equal(mirrored.copy.align, "right");
+  assert.equal(mirrored.copy.left, 2732 - normal.copy.left - normal.copy.width);
+  assert.equal(mirrored.nodes[0].cx, 2732 - normal.nodes[0].cx);
+  assert.equal(mirrored.nodes[0].rotation, -normal.nodes[0].rotation);
+});
+
+test("iPad detail callouts resolve fixed rectangles with safe focus points", () => {
+  const scene = ipadLayouts.resolveComposition({
+    layoutId: "detail-callout",
+    tuning: { focusX: 0.2, focusY: 0.8 },
+  });
+  const details = scene.nodes.filter((node) => node.type === "detail");
+
+  assert.equal(details.length, 2);
+  assert.deepEqual(
+    details.map(({ width, height }) => ({ width, height })),
+    [
+      { width: 620, height: 360 },
+      { width: 620, height: 360 },
+    ],
+  );
+  assert.ok(details.every((node) => node.focusX >= 0.2 && node.focusX <= 0.8));
+  assert.ok(details.every((node) => node.focusY >= 0.2 && node.focusY <= 0.8));
+});
+
+test("iPad classic scene ignores new tuning and retains legacy width and top inputs", () => {
+  const scene = ipadLayouts.resolveComposition({
+    layoutId: "classic",
+    tuning: { scale: 1.05, y: 80, spread: 1.1, tilt: 0, mirror: true },
+    classicDeviceWidth: 1760,
+    classicDeviceTop: 536,
+  });
+  assert.deepEqual(
+    scene.nodes.map(({ cx, top, width, rotation }) => ({ cx, top, width, rotation })),
+    [{ cx: 1366, top: 536, width: 1760, rotation: 0 }],
+  );
 });

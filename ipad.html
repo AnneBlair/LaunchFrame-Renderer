@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>LaunchFrame · iPad App Store 宣传图</title>
-    <link rel="stylesheet" href="./styles.css?v=20260808-layouts" />
+    <link rel="stylesheet" href="./styles.css?v=20260808-ipad-layouts" />
   </head>
   <body data-product="ipad">
     <div class="workspace">
@@ -87,9 +87,50 @@
           </label>
         </section>
 
-        <section class="control-section" aria-labelledby="device-heading">
+        <section id="layoutSection" class="control-section" aria-labelledby="templates-heading">
           <div class="section-heading">
             <span class="section-index">03</span>
+            <h2 id="templates-heading">排版模板</h2>
+          </div>
+
+          <div
+            id="layoutGallery"
+            class="layout-gallery"
+            role="radiogroup"
+            aria-label="iPad 宣传图排版模板"
+          ></div>
+
+          <div class="layout-subsection">
+            <span class="layout-subsection-label">整组主题</span>
+            <div id="themeOptions" class="theme-options" role="radiogroup" aria-label="整组主题"></div>
+          </div>
+
+          <div id="slotAssignmentPanel" class="layout-subsection" hidden>
+            <span class="layout-subsection-label">图片槽位</span>
+            <div id="slotAssignments" class="slot-assignments"></div>
+            <p id="slotAssignmentHint" class="layout-hint"></p>
+          </div>
+
+          <div id="annotationPanel" class="layout-subsection" hidden>
+            <label class="toggle-field" for="annotationsToggle">
+              <span>显示步骤标注</span>
+              <input id="annotationsToggle" type="checkbox" />
+            </label>
+            <div id="annotationFields" class="annotation-fields" hidden></div>
+            <p id="annotationStatus" class="layout-hint" role="status" aria-live="polite"></p>
+          </div>
+
+          <p
+            id="layoutValidationStatus"
+            class="layout-hint"
+            role="status"
+            aria-live="polite"
+          ></p>
+        </section>
+
+        <section class="control-section" aria-labelledby="device-heading">
+          <div class="section-heading">
+            <span class="section-index">04</span>
             <h2 id="device-heading">设备</h2>
           </div>
 
@@ -97,29 +138,91 @@
             <span>iPad 原机框</span>
             <select id="frameSelect"></select>
           </label>
+          <p class="layout-hint">默认使用 13″ 银色机框；需要时仍可切换 11″ 或深空黑色。</p>
         </section>
 
         <section class="control-section" aria-labelledby="layout-heading">
           <div class="section-heading">
-            <span class="section-index">04</span>
+            <span class="section-index">05</span>
             <h2 id="layout-heading">构图微调</h2>
           </div>
 
-          <label class="range-field" for="deviceWidthInput">
-            <span>
-              <span>iPad 宽度</span>
-              <output id="deviceWidthOutput" for="deviceWidthInput"></output>
-            </span>
-            <input id="deviceWidthInput" type="range" min="1500" max="2200" step="4" />
-          </label>
+          <div id="classicLayoutControls" class="layout-control-group">
+            <label class="range-field" for="deviceWidthInput">
+              <span>
+                <span>iPad 宽度</span>
+                <output id="deviceWidthOutput" for="deviceWidthInput"></output>
+              </span>
+              <input id="deviceWidthInput" type="range" min="1500" max="2200" step="4" />
+            </label>
 
-          <label class="range-field" for="deviceTopInput">
-            <span>
-              <span>iPad 上边距</span>
-              <output id="deviceTopOutput" for="deviceTopInput"></output>
-            </span>
-            <input id="deviceTopInput" type="range" min="460" max="720" step="4" />
-          </label>
+            <label class="range-field" for="deviceTopInput">
+              <span>
+                <span>iPad 上边距</span>
+                <output id="deviceTopOutput" for="deviceTopInput"></output>
+              </span>
+              <input id="deviceTopInput" type="range" min="460" max="720" step="4" />
+            </label>
+          </div>
+
+          <div id="presetLayoutControls" class="layout-control-group" hidden>
+            <label class="range-field layout-tuning-control" data-tuning-control="scale" for="layoutScaleInput">
+              <span>
+                <span>整体缩放</span>
+                <output id="layoutScaleOutput" for="layoutScaleInput"></output>
+              </span>
+              <input id="layoutScaleInput" type="range" min="0.94" max="1.05" step="0.01" />
+            </label>
+
+            <label class="range-field layout-tuning-control" data-tuning-control="y" for="layoutYInput">
+              <span>
+                <span>垂直偏移</span>
+                <output id="layoutYOutput" for="layoutYInput"></output>
+              </span>
+              <input id="layoutYInput" type="range" min="-80" max="80" step="4" />
+            </label>
+
+            <label class="range-field layout-tuning-control" data-tuning-control="spread" for="layoutSpreadInput">
+              <span>
+                <span>展开度</span>
+                <output id="layoutSpreadOutput" for="layoutSpreadInput"></output>
+              </span>
+              <input id="layoutSpreadInput" type="range" min="0.9" max="1.1" step="0.01" />
+            </label>
+
+            <label class="range-field layout-tuning-control" data-tuning-control="tilt" for="layoutTiltInput">
+              <span>
+                <span>倾斜强度</span>
+                <output id="layoutTiltOutput" for="layoutTiltInput"></output>
+              </span>
+              <input id="layoutTiltInput" type="range" min="0" max="1" step="0.05" />
+            </label>
+
+            <label class="range-field layout-tuning-control" data-tuning-control="focusX" for="focusXInput">
+              <span>
+                <span>聚焦水平位置</span>
+                <output id="focusXOutput" for="focusXInput"></output>
+              </span>
+              <input id="focusXInput" type="range" min="0.2" max="0.8" step="0.02" />
+            </label>
+
+            <label class="range-field layout-tuning-control" data-tuning-control="focusY" for="focusYInput">
+              <span>
+                <span>聚焦垂直位置</span>
+                <output id="focusYOutput" for="focusYInput"></output>
+              </span>
+              <input id="focusYInput" type="range" min="0.2" max="0.8" step="0.02" />
+            </label>
+
+            <label class="toggle-field layout-tuning-control" data-tuning-control="mirror" for="layoutMirrorToggle">
+              <span>镜像构图</span>
+              <input id="layoutMirrorToggle" type="checkbox" />
+            </label>
+
+            <button id="resetLayoutButton" class="secondary-button reset-layout-button" type="button">
+              恢复本模板默认
+            </button>
+          </div>
         </section>
 
         <div id="controlsActions" class="controls-actions">
@@ -153,6 +256,8 @@
               <p id="posterSubtitle"></p>
             </header>
 
+            <div id="compositionLayer" class="composition-layer" aria-hidden="true" hidden></div>
+
             <div id="device" class="device" aria-label="iPad 预览">
               <div id="deviceScreen" class="device-screen">
                 <img id="screenshotImage" crossorigin="anonymous" alt="应用截图" hidden />
@@ -172,6 +277,7 @@
       <p id="exportMeasureSubtitle"></p>
     </div>
 
-    <script src="./app.js?v=20260808-layouts"></script>
+    <script src="./layouts.js?v=20260808-ipad-layouts"></script>
+    <script src="./app.js?v=20260808-ipad-layouts"></script>
   </body>
 </html>

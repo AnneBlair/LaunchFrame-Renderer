@@ -177,7 +177,7 @@ const PRODUCT_CONFIGS = Object.freeze({
     defaults: {
       title: "海量词书，掌握你的英语",
       subtitle: "从入门到进阶，随时随地高效记忆单词",
-      frame: "ipad-pro-m5-11-space-black",
+      frame: "ipad-pro-m5-13-silver",
       screenshot: "./assets/sample-ipad-screenshot.png",
       screenshotName: "iPad 示例截图",
       fit: "fill",
@@ -220,9 +220,12 @@ const ARTBOARD = Object.freeze(PRODUCT.artboard);
 const MODEL_GEOMETRY = Object.freeze(PRODUCT.geometry);
 const FRAME_GROUPS = PRODUCT.frameGroups;
 const DEFAULTS = Object.freeze(PRODUCT.defaults);
-const LAYOUT_ENGINE =
-  productKey === "iphone" && window.LaunchFrameLayouts ? window.LaunchFrameLayouts : null;
-const IPHONE_LAYOUTS_ENABLED = Boolean(LAYOUT_ENGINE);
+const layoutRegistry = window.LaunchFrameLayouts ?? null;
+const LAYOUT_ENGINE = layoutRegistry?.forProduct
+  ? layoutRegistry.forProduct(productKey)
+  : productKey === "iphone"
+    ? layoutRegistry
+    : null;
 
 const FRAMES = FRAME_GROUPS.flatMap((group) =>
   group.colors.map(([colorId, colorLabel, fileColor]) => ({
@@ -302,6 +305,7 @@ const elements = {
   focusXOutput: document.querySelector("#focusXOutput"),
   focusYInput: document.querySelector("#focusYInput"),
   focusYOutput: document.querySelector("#focusYOutput"),
+  layoutMirrorToggle: document.querySelector("#layoutMirrorToggle"),
   resetLayoutButton: document.querySelector("#resetLayoutButton"),
 };
 
@@ -333,9 +337,35 @@ function applyProductConfiguration() {
     [elements.deviceWidthInput, PRODUCT.layout.deviceWidth],
     [elements.deviceTopInput, PRODUCT.layout.deviceTop],
   ]) {
+    if (!input) continue;
     input.min = String(range.min);
     input.max = String(range.max);
     input.step = String(range.step);
+  }
+
+  if (LAYOUT_ENGINE) {
+    for (const [input, key, step] of [
+      [elements.layoutScaleInput, "scale", 0.01],
+      [elements.layoutYInput, "y", 4],
+      [elements.layoutSpreadInput, "spread", 0.01],
+      [elements.layoutTiltInput, "tilt", 0.05],
+      [elements.focusXInput, "focusX", 0.02],
+      [elements.focusYInput, "focusY", 0.02],
+    ]) {
+      if (!input) continue;
+      const range = LAYOUT_ENGINE.TUNING_RANGES[key];
+      input.min = String(range.min);
+      input.max = String(range.max);
+      input.step = String(step);
+    }
+
+    const annotationStyle = LAYOUT_ENGINE.ANNOTATION_STYLE;
+    if (annotationStyle) {
+      rootStyle.setProperty("--annotation-label-font-size", `${annotationStyle.fontSize}px`);
+      rootStyle.setProperty("--annotation-index-font-size", `${annotationStyle.indexSize}px`);
+      rootStyle.setProperty("--annotation-circle-size", `${annotationStyle.circleSize}px`);
+      rootStyle.setProperty("--annotation-gap", `${annotationStyle.gap}px`);
+    }
   }
 }
 
@@ -420,6 +450,7 @@ const initialLayoutState = LAYOUT_ENGINE
         tilt: params.has("layoutTilt") ? params.get("layoutTilt") : undefined,
         focusX: params.has("focusX") ? params.get("focusX") : undefined,
         focusY: params.has("focusY") ? params.get("focusY") : undefined,
+        mirror: params.get("layoutMirror") === "1",
       },
       annotations: {
         enabled: params.get("annotations") === "1",
@@ -579,7 +610,7 @@ function applyFrame(frameId) {
       updateRenderState();
     };
     elements.frameImage.onerror = () => {
-      elements.frameImage.dataset.loadError = "iPhone 机框无法读取";
+      elements.frameImage.dataset.loadError = `${PRODUCT.frameLoadLabel}无法读取`;
       updateRenderState();
     };
   }
@@ -613,6 +644,46 @@ function resolvePageSlots(page = getActivePage()) {
   );
 }
 
+function getCompositionNodeHeight(node, geometry) {
+  if (node.type === "detail") return node.height;
+  if (node.type === "card") return node.width * (ARTBOARD.height / ARTBOARD.width);
+  return node.width * (geometry.frameHeight / geometry.frameWidth);
+}
+
+function getRotatedNodeBounds(node, geometry) {
+  const width = node.width;
+  const height = getCompositionNodeHeight(node, geometry);
+  const radians = (node.rotation * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const points = [
+    [-width / 2, 0],
+    [width / 2, 0],
+    [-width / 2, height],
+    [width / 2, height],
+  ].map(([x, y]) => ({
+    x: node.cx + x * cosine - y * sine,
+    y: node.top + x * sine + y * cosine,
+  }));
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    left: Math.min(...xs),
+    right: Math.max(...xs),
+    top: Math.min(...ys),
+    bottom: Math.max(...ys),
+  };
+}
+
+function rectanglesOverlap(left, right, margin = 0) {
+  return !(
+    left.right + margin <= right.left ||
+    right.right + margin <= left.left ||
+    left.bottom + margin <= right.top ||
+    right.bottom + margin <= left.top
+  );
+}
+
 function getPageLayoutValidation(page = getActivePage()) {
   if (!LAYOUT_ENGINE) {
     return { valid: Boolean(page.screenshot), errors: page.screenshot ? [] : ["截图为空"] };
@@ -634,12 +705,10 @@ function getPageLayoutValidation(page = getActivePage()) {
   });
   const titleSize = PRODUCT.copy.title.fontSize * scene.copy.titleScale;
   const subtitleSize = PRODUCT.copy.subtitle.fontSize * scene.copy.subtitleScale;
-  const copyBottom =
-    scene.copy.top +
+  const copyHeight =
     textLines.title.length * titleSize * PRODUCT.copy.title.lineHeight +
     (textLines.subtitle.length ? PRODUCT.copy.gap : 0) +
     textLines.subtitle.length * subtitleSize * PRODUCT.copy.subtitle.lineHeight;
-  const firstVisualTop = Math.min(...scene.nodes.map((node) => node.top));
   const errors = [...validation.errors];
   const hasHorizontalOverflow = [
     elements.exportMeasureTitle,
@@ -648,8 +717,35 @@ function getPageLayoutValidation(page = getActivePage()) {
   if (hasHorizontalOverflow) {
     errors.push("标题或说明文案超出安全宽度");
   }
-  if (copyBottom > firstVisualTop - 48) {
-    errors.push("标题或说明文案过长，已进入设备安全区");
+
+  if (productKey === "iphone") {
+    const firstVisualTop = Math.min(...scene.nodes.map((node) => node.top));
+    if (scene.copy.top + copyHeight > firstVisualTop - 48) {
+      errors.push("标题或说明文案过长，已进入设备安全区");
+    }
+  } else {
+    if (preset.copy.maxTitleLines && textLines.title.length > preset.copy.maxTitleLines) {
+      errors.push(`主标题最多 ${preset.copy.maxTitleLines} 行`);
+    }
+    if (
+      preset.copy.maxSubtitleLines &&
+      textLines.subtitle.length > preset.copy.maxSubtitleLines
+    ) {
+      errors.push(`说明文案最多 ${preset.copy.maxSubtitleLines} 行`);
+    }
+
+    const copyBounds = {
+      left: scene.copy.left,
+      right: scene.copy.left + scene.copy.width,
+      top: scene.copy.top,
+      bottom: scene.copy.top + copyHeight,
+    };
+    const selectedFrame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
+    const geometry = MODEL_GEOMETRY[selectedFrame.model];
+    const overlapsVisual = scene.nodes.some((node) =>
+      rectanglesOverlap(copyBounds, getRotatedNodeBounds(node, geometry), 48),
+    );
+    if (overlapsVisual) errors.push("标题或说明文案过长，已进入设备安全区");
   }
   return { valid: errors.length === 0, errors };
 }
@@ -791,7 +887,7 @@ function createDeviceNode(node, slotPage, frame, geometry) {
     updateRenderState();
   };
   frameImage.onerror = () => {
-    frameImage.dataset.loadError = "iPhone 机框无法读取";
+    frameImage.dataset.loadError = `${PRODUCT.frameLoadLabel}无法读取`;
     updateRenderState();
   };
   frameImage.src = frame.src;
@@ -807,6 +903,7 @@ function createCardNode(node, slotPage) {
   wrapper.style.top = `${node.top}px`;
   wrapper.style.width = `${node.width}px`;
   wrapper.style.aspectRatio = PRODUCT.screenshotAspectRatio;
+  if (node.radius) wrapper.style.borderRadius = `${node.radius}px`;
   wrapper.style.zIndex = String(node.z);
   wrapper.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
 
@@ -822,6 +919,68 @@ function createCardNode(node, slotPage) {
   return wrapper;
 }
 
+function createDetailNode(node, slotPage) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "composition-detail";
+  wrapper.style.left = `${node.cx}px`;
+  wrapper.style.top = `${node.top}px`;
+  wrapper.style.width = `${node.width}px`;
+  wrapper.style.height = `${node.height}px`;
+  wrapper.style.zIndex = String(node.z);
+  wrapper.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
+
+  const screenshot = document.createElement("img");
+  screenshot.crossOrigin = "anonymous";
+  screenshot.alt = "";
+  screenshot.draggable = false;
+  const placeholder = createCompositionPlaceholder(
+    slotPage?.screenshot ? "正在读取细节" : "缺少主截图",
+  );
+  wrapper.append(screenshot, placeholder);
+
+  if (slotPage?.screenshot) {
+    slotPage.imageState = slotPage.imageState === "ready" ? "ready" : "loading";
+    screenshot.onload = () => {
+      slotPage.imageState = "ready";
+      slotPage.imageWidth ??= screenshot.naturalWidth;
+      slotPage.imageHeight ??= screenshot.naturalHeight;
+      const detailAspect = node.width / node.height;
+      const cropWidth = Math.min(
+        screenshot.naturalWidth / 2,
+        (screenshot.naturalHeight / 2) * detailAspect,
+      );
+      const cropHeight = cropWidth / detailAspect;
+      const sourceX = Math.min(
+        Math.max(0, screenshot.naturalWidth - cropWidth),
+        Math.max(0, screenshot.naturalWidth * node.focusX - cropWidth / 2),
+      );
+      const sourceY = Math.min(
+        Math.max(0, screenshot.naturalHeight - cropHeight),
+        Math.max(0, screenshot.naturalHeight * node.focusY - cropHeight / 2),
+      );
+      const displayScale = node.width / cropWidth;
+      screenshot.style.left = `${-sourceX * displayScale}px`;
+      screenshot.style.top = `${-sourceY * displayScale}px`;
+      screenshot.style.width = `${screenshot.naturalWidth * displayScale}px`;
+      screenshot.style.height = `${screenshot.naturalHeight * displayScale}px`;
+      placeholder.hidden = true;
+      updateRenderState();
+      updatePageControls();
+    };
+    screenshot.onerror = () => {
+      slotPage.imageState = "error";
+      screenshot.hidden = true;
+      placeholder.hidden = false;
+      placeholder.textContent = "截图无法读取";
+      updateRenderState();
+      updatePageControls();
+    };
+    screenshot.src = slotPage.screenshot;
+  }
+
+  return wrapper;
+}
+
 function appendCompositionAnnotations(scene, page) {
   if (!page.annotations.enabled || !scene.annotations) return;
 
@@ -829,7 +988,7 @@ function appendCompositionAnnotations(scene, page) {
     const connector = scene.annotations.connector;
     const arrow = document.createElement("span");
     arrow.className = "composition-arrow";
-    arrow.textContent = "→";
+    arrow.textContent = connector.direction === -1 ? "←" : "→";
     arrow.style.left = `${connector.cx - connector.size / 2}px`;
     arrow.style.top = `${connector.cy - connector.size / 2}px`;
     arrow.style.width = `${connector.size}px`;
@@ -903,11 +1062,13 @@ function applyComposition(page = getActivePage()) {
 
   scene.nodes.forEach((node) => {
     const slotPage = slots[node.slot];
-    elements.compositionLayer.append(
+    const element =
       node.type === "card"
         ? createCardNode(node, slotPage)
-        : createDeviceNode(node, slotPage, selectedFrame, geometry),
-    );
+        : node.type === "detail"
+          ? createDetailNode(node, slotPage)
+          : createDeviceNode(node, slotPage, selectedFrame, geometry);
+    elements.compositionLayer.append(element);
   });
 
   if (scene.lens) {
@@ -1058,16 +1219,30 @@ function createLayoutThumbnail(preset) {
     classicDeviceWidth: DEFAULTS.deviceWidth,
     classicDeviceTop: DEFAULTS.deviceTop,
   });
-  const scaleX = 32 / LAYOUT_ENGINE.ARTBOARD.width;
-  const scaleY = 52 / LAYOUT_ENGINE.ARTBOARD.height;
+  const thumbnailSize = LAYOUT_ENGINE.THUMBNAIL ?? { width: 32, height: 52 };
+  thumbnail.style.width = `${thumbnailSize.width}px`;
+  thumbnail.style.height = `${thumbnailSize.height}px`;
+  const scaleX = thumbnailSize.width / LAYOUT_ENGINE.ARTBOARD.width;
+  const scaleY = thumbnailSize.height / LAYOUT_ENGINE.ARTBOARD.height;
+  const selectedFrame = FRAMES.find((item) => item.id === DEFAULTS.frame) ?? FRAMES[0];
+  const geometry = MODEL_GEOMETRY[selectedFrame.model];
 
   scene.nodes.forEach((node) => {
     const miniature = document.createElement("i");
-    miniature.className = `layout-thumbnail-device${node.type === "card" ? " is-card" : ""}`;
+    miniature.className = `layout-thumbnail-device${
+      node.type === "card" ? " is-card" : ""
+    }${node.type === "detail" ? " is-detail" : ""}`;
     miniature.style.left = `${node.cx * scaleX}px`;
     miniature.style.top = `${node.top * scaleY}px`;
     miniature.style.width = `${Math.max(4, node.width * scaleX)}px`;
-    miniature.style.height = `${Math.max(9, node.width * 2.04 * scaleY)}px`;
+    const nodeHeight =
+      productKey === "iphone"
+        ? node.width * 2.04
+        : getCompositionNodeHeight(node, geometry);
+    miniature.style.height = `${Math.max(
+      productKey === "iphone" ? 9 : 3,
+      nodeHeight * scaleY,
+    )}px`;
     miniature.style.zIndex = String(node.z);
     miniature.style.transform = `translateX(-50%) rotate(${node.rotation}deg)`;
     thumbnail.append(miniature);
@@ -1274,6 +1449,9 @@ function renderTuningControls(page, preset) {
     page.layoutTuning.focusY,
     (value) => `${Math.round(value * 100)}%`,
   );
+  if (elements.layoutMirrorToggle) {
+    elements.layoutMirrorToggle.checked = Boolean(page.layoutTuning.mirror);
+  }
 }
 
 function renderLayoutEditor(page = getActivePage()) {
@@ -1797,7 +1975,7 @@ function drawCompositionCard(context, node, screenshotImage, fit, theme) {
   const width = node.width;
   const height = width * (ARTBOARD.height / ARTBOARD.width);
   const x = -width / 2;
-  const radius = Math.max(36, width * 0.105);
+  const radius = node.radius ?? Math.max(36, width * 0.105);
 
   context.save();
   context.translate(node.cx, node.top);
@@ -1812,6 +1990,52 @@ function drawCompositionCard(context, node, screenshotImage, fit, theme) {
   context.restore();
   context.lineWidth = 3;
   context.strokeStyle = "rgba(255, 255, 255, 0.68)";
+  roundedRectPath(context, x, 0, width, height, radius);
+  context.stroke();
+  context.restore();
+}
+
+function drawCompositionDetail(context, node, screenshotImage, theme) {
+  const width = node.width;
+  const height = node.height;
+  const x = -width / 2;
+  const radius = Math.max(32, width * 0.065);
+  const detailAspect = width / height;
+  const cropWidth = Math.min(
+    screenshotImage.naturalWidth / 2,
+    (screenshotImage.naturalHeight / 2) * detailAspect,
+  );
+  const cropHeight = cropWidth / detailAspect;
+  const sourceX = Math.min(
+    Math.max(0, screenshotImage.naturalWidth - cropWidth),
+    Math.max(0, screenshotImage.naturalWidth * node.focusX - cropWidth / 2),
+  );
+  const sourceY = Math.min(
+    Math.max(0, screenshotImage.naturalHeight - cropHeight),
+    Math.max(0, screenshotImage.naturalHeight * node.focusY - cropHeight / 2),
+  );
+
+  context.save();
+  context.translate(node.cx, node.top);
+  context.rotate((node.rotation * Math.PI) / 180);
+  drawCompositionShadow(context, x, 0, width, height, radius, theme.shadowColor);
+  context.save();
+  roundedRectPath(context, x, 0, width, height, radius);
+  context.clip();
+  context.drawImage(
+    screenshotImage,
+    sourceX,
+    sourceY,
+    cropWidth,
+    cropHeight,
+    x,
+    0,
+    width,
+    height,
+  );
+  context.restore();
+  context.lineWidth = 8;
+  context.strokeStyle = theme.lensBorder;
   roundedRectPath(context, x, 0, width, height, radius);
   context.stroke();
   context.restore();
@@ -1898,7 +2122,7 @@ function drawCompositionTextBlock(
   const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
   const descent = metrics.actualBoundingBoxDescent || fontSize * 0.2;
   const baselineOffset = (lineHeight - ascent - descent) / 2 + ascent;
-  const x = align === "center" ? left + width / 2 : left;
+  const x = align === "center" ? left + width / 2 : align === "right" ? left + width : left;
 
   lines.forEach((line, index) => {
     drawAlignedSpacedText(
@@ -1916,6 +2140,12 @@ function drawCompositionTextBlock(
 function drawCompositionAnnotations(context, snapshot, scene, theme) {
   if (!snapshot.annotations.enabled || !scene.annotations) return;
   const fontFamily = '"PingFang SC", "SF Pro Text", "Helvetica Neue", Arial, sans-serif';
+  const annotationStyle = LAYOUT_ENGINE.ANNOTATION_STYLE ?? {
+    fontSize: 38,
+    indexSize: 28,
+    circleSize: 64,
+    gap: 16,
+  };
 
   if (scene.annotations.connector) {
     const connector = scene.annotations.connector;
@@ -1932,33 +2162,44 @@ function drawCompositionAnnotations(context, snapshot, scene, theme) {
     context.font = `500 ${connector.size * 0.56}px ${fontFamily}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("→", connector.cx, connector.cy + connector.size * 0.015);
+    context.fillText(
+      connector.direction === -1 ? "←" : "→",
+      connector.cx,
+      connector.cy + connector.size * 0.015,
+    );
   }
 
   scene.annotations.labels.forEach((position, index) => {
     const label = snapshot.annotations.labels[index] ?? "";
-    const availableWidth = Math.max(0, position.width - 80);
-    context.font = `640 38px ${fontFamily}`;
+    const availableWidth = Math.max(
+      0,
+      position.width - annotationStyle.circleSize - annotationStyle.gap,
+    );
+    context.font = `640 ${annotationStyle.fontSize}px ${fontFamily}`;
     if (label && context.measureText(label).width > availableWidth) {
       throw new Error(`步骤 ${index + 1} 标签过长，请缩短后再导出`);
     }
     const left = position.cx - position.width / 2;
-    const circleX = left + 32;
-    const circleY = position.top + 32;
+    const circleX = left + annotationStyle.circleSize / 2;
+    const circleY = position.top + annotationStyle.circleSize / 2;
     context.fillStyle = theme.annotationSurface;
     context.beginPath();
-    context.arc(circleX, circleY, 32, 0, Math.PI * 2);
+    context.arc(circleX, circleY, annotationStyle.circleSize / 2, 0, Math.PI * 2);
     context.fill();
     context.fillStyle = theme.annotationText;
-    context.font = `600 28px ${fontFamily}`;
+    context.font = `600 ${annotationStyle.indexSize}px ${fontFamily}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
     context.fillText(String(index + 1).padStart(2, "0"), circleX, circleY + 1);
     if (label) {
       context.fillStyle = theme.subtitleColor;
-      context.font = `640 38px ${fontFamily}`;
+      context.font = `640 ${annotationStyle.fontSize}px ${fontFamily}`;
       context.textAlign = "left";
-      context.fillText(label, left + 80, circleY + 1);
+      context.fillText(
+        label,
+        left + annotationStyle.circleSize + annotationStyle.gap,
+        circleY + 1,
+      );
     }
   });
 }
@@ -1980,6 +2221,8 @@ function drawCompositionPoster(context, snapshot, screenshotImages, frameImage) 
     const slot = snapshot.slots[node.slot];
     if (node.type === "card") {
       drawCompositionCard(context, node, screenshotImage, slot.fit, theme);
+    } else if (node.type === "detail") {
+      drawCompositionDetail(context, node, screenshotImage, theme);
     } else {
       drawCompositionDevice(
         context,
@@ -2752,6 +2995,17 @@ function bindEvents() {
       renderTuningControls(page, getLayoutPreset(page));
       updatePageControls();
     });
+  });
+
+  elements.layoutMirrorToggle?.addEventListener("change", (event) => {
+    const page = getActivePage();
+    page.layoutTuning = LAYOUT_ENGINE.normalizeTuning({
+      ...page.layoutTuning,
+      mirror: event.target.checked,
+    });
+    applyComposition(page);
+    renderTuningControls(page, getLayoutPreset(page));
+    updatePageControls();
   });
 
   elements.resetLayoutButton?.addEventListener("click", () => {
