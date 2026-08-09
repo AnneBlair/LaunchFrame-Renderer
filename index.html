@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>LaunchFrame · App Store 宣传图预览</title>
-    <link rel="stylesheet" href="./styles.css?v=20260808-ipad-layouts" />
+    <link rel="stylesheet" href="./styles.css?v=20260809-freelingo-promo" />
   </head>
   <body data-product="iphone">
     <div class="workspace">
@@ -26,6 +26,22 @@
           <a href="./" aria-current="page">iPhone</a>
           <a href="./ipad.html">iPad</a>
         </nav>
+
+        <a
+          class="app-promo"
+          href="https://freelingo.ai/"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="访问 FreeLingo 官网：背过的单词，不该再忘。（新窗口打开）"
+        >
+          <span class="app-promo-mark" aria-hidden="true">FL</span>
+          <span class="app-promo-copy">
+            <small>也试试我们的语言学习 App</small>
+            <strong>FreeLingo</strong>
+            <span>背过的单词，不该再忘。</span>
+          </span>
+          <span class="app-promo-arrow" aria-hidden="true">↗</span>
+        </a>
 
         <section class="control-section" aria-labelledby="screenshots-heading">
           <div class="section-heading">
@@ -260,6 +276,8 @@
               </div>
               <img id="frameImage" class="frame-image" alt="" />
             </div>
+
+            <div id="dropStatus" class="drop-status" role="status" aria-live="polite" hidden></div>
           </article>
         </div>
       </main>
@@ -270,7 +288,8 @@
       <p id="exportMeasureSubtitle"></p>
     </div>
 
-    <script src="./layouts.js?v=20260808-ipad-layouts"></script>
-    <script src="./app.js?v=20260808-ipad-layouts"></script>
+    <script src="./layouts.js?v=20260809-cross-device"></script>
+    <script src="./dragdrop.js?v=20260809-dragdrop-fix"></script>
+    <script src="./app.js?v=20260809-dragdrop-fix"></script>
   </body>
 </html>

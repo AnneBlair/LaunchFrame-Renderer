@@ -9,6 +9,7 @@ const {
   normalizeTuning,
   createDefaultLayoutState,
   resolveSlotPages,
+  resolveTypedSlots,
   resolveComposition,
   validateComposition,
   forProduct,
@@ -126,9 +127,9 @@ test("validation reports missing, failed, and overflowing content", () => {
   ]);
 });
 
-test("registers iPad classic plus seven guarded layouts", () => {
+test("registers iPad single-device and cross-device guarded layouts", () => {
   assert.deepEqual(ipadLayouts.ARTBOARD, { width: 2732, height: 2048 });
-  assert.equal(Object.keys(ipadLayouts.LAYOUT_PRESETS).length, 8);
+  assert.equal(Object.keys(ipadLayouts.LAYOUT_PRESETS).length, 14);
   assert.equal(Object.keys(ipadLayouts.THEMES).length, 4);
 
   for (const preset of Object.values(ipadLayouts.LAYOUT_PRESETS)) {
@@ -136,6 +137,115 @@ test("registers iPad classic plus seven guarded layouts", () => {
     assert.ok(preset.nodes.filter((node) => node.type === "device").length <= 2);
     assert.ok(preset.nodes.every((node) => Math.abs(node.rotation) <= 6));
   }
+});
+
+test("iPad cross-device presets declare typed iPad and iPhone slots", () => {
+  const crossDeviceIds = [
+    "immersive-overlap",
+    "content-stage",
+    "ecosystem-hero",
+    "capture-to-canvas",
+    "continuity-stack",
+    "companion-mode",
+  ];
+
+  for (const layoutId of crossDeviceIds) {
+    const preset = ipadLayouts.LAYOUT_PRESETS[layoutId];
+    assert.equal(preset.category, "ecosystem");
+    assert.deepEqual(
+      preset.slots.map(({ product, role }) => ({ product, role })),
+      [
+        { product: "ipad", role: "primary" },
+        { product: "iphone", role: "support" },
+      ],
+    );
+    assert.deepEqual(
+      new Set(preset.nodes.map((node) => node.product)),
+      new Set(["ipad", "iphone"]),
+    );
+  }
+});
+
+test("reference-led iPad layouts preserve overlap and separated-stage hierarchy", () => {
+  assert.equal(ipadLayouts.normalizeLayoutId("immersive-overlap"), "immersive-overlap");
+  assert.equal(ipadLayouts.normalizeLayoutId("content-stage"), "content-stage");
+
+  const overlap = ipadLayouts.resolveComposition({ layoutId: "immersive-overlap" });
+  const overlapIpad = overlap.nodes.find((node) => node.product === "ipad");
+  const overlapIphone = overlap.nodes.find((node) => node.product === "iphone");
+  assert.ok(overlapIpad.width >= 2200);
+  assert.ok(overlapIphone.cx < overlapIpad.cx);
+  assert.ok(overlapIphone.z > overlapIpad.z);
+  assert.ok(
+    overlapIphone.cx + overlapIphone.width / 2 > overlapIpad.cx - overlapIpad.width / 2,
+  );
+
+  const stage = ipadLayouts.resolveComposition({ layoutId: "content-stage" });
+  const stageIpad = stage.nodes.find((node) => node.product === "ipad");
+  const stageIphone = stage.nodes.find((node) => node.product === "iphone");
+  assert.ok(stageIpad.width >= 1800);
+  assert.ok(stageIpad.cx < stageIphone.cx);
+  assert.ok(stageIphone.z > stageIpad.z);
+  assert.ok(stageIphone.top > stageIpad.top);
+});
+
+test("typed slots keep companion assets outside the iPad output pool", () => {
+  const ipadPages = [page("ipad-a"), page("ipad-b")];
+  const iphoneAssets = [page("phone-a"), page("phone-b")];
+  const slots = ipadLayouts.LAYOUT_PRESETS["ecosystem-hero"].slots;
+
+  assert.deepEqual(
+    resolveTypedSlots({
+      pools: { ipad: ipadPages, iphone: iphoneAssets },
+      activeProduct: "ipad",
+      activeItemId: "ipad-b",
+      slotOverrides: { 0: "ipad-a" },
+      slots,
+    }).map((item) => item?.id),
+    ["ipad-b", "phone-a"],
+  );
+});
+
+test("typed companion override is stable and deletion falls back to the next asset", () => {
+  const ipadPages = [page("ipad-a"), page("ipad-b")];
+  const phoneA = page("phone-a");
+  const phoneB = page("phone-b");
+  const slots = ipadLayouts.LAYOUT_PRESETS["companion-mode"].slots;
+  const options = {
+    pools: { ipad: [ipadPages[1], ipadPages[0]], iphone: [phoneA, phoneB] },
+    activeProduct: "ipad",
+    activeItemId: "ipad-a",
+    slotOverrides: { 1: "phone-b" },
+    slots,
+  };
+
+  assert.deepEqual(resolveTypedSlots(options).map((item) => item?.id), ["ipad-a", "phone-b"]);
+  assert.deepEqual(
+    resolveTypedSlots({
+      ...options,
+      pools: { ...options.pools, iphone: [phoneA] },
+    }).map((item) => item?.id),
+    ["ipad-a", "phone-a"],
+  );
+});
+
+test("cross-device composition preserves each node product through tuning and mirroring", () => {
+  const scene = ipadLayouts.resolveComposition({
+    layoutId: "capture-to-canvas",
+    tuning: { mirror: true, tilt: 0.5 },
+  });
+  assert.deepEqual(scene.nodes.map((node) => node.product).sort(), ["ipad", "iphone"]);
+  const iphoneNode = scene.nodes.find((node) => node.product === "iphone");
+  assert.equal(iphoneNode.rotation, 1.5);
+  assert.equal(iphoneNode.cx, 2732 - 450);
+});
+
+test("composition validation exposes typed screenshot errors", () => {
+  const result = ipadLayouts.validateComposition({
+    slots: [page("ipad"), { ...page("phone"), validationError: "iPhone 辅助截图应为竖版" }],
+    slotCount: 2,
+  });
+  assert.deepEqual(result.errors, ["iPhone 辅助截图应为竖版"]);
 });
 
 test("iPad tuning has independent clamps and a normalized mirror switch", () => {

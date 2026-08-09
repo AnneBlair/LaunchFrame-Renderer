@@ -226,17 +226,36 @@ const LAYOUT_ENGINE = layoutRegistry?.forProduct
   : productKey === "iphone"
     ? layoutRegistry
     : null;
+const DRAG_DROP = window.LaunchFrameDragDrop ?? null;
 
-const FRAMES = FRAME_GROUPS.flatMap((group) =>
-  group.colors.map(([colorId, colorLabel, fileColor]) => ({
-    id: `${group.model}-${colorId}`,
-    groupLabel: group.label,
-    label: `${group.label} · ${colorLabel}`,
-    model: group.model,
-    colorId,
-    src: `./assets/frames/${group.folder}/${group.assetName ?? group.label} - ${fileColor} - ${group.orientation}.png`,
-  })),
+function createFrames(config) {
+  return config.frameGroups.flatMap((group) =>
+    group.colors.map(([colorId, colorLabel, fileColor]) => ({
+      id: `${group.model}-${colorId}`,
+      groupLabel: group.label,
+      label: `${group.label} · ${colorLabel}`,
+      model: group.model,
+      colorId,
+      src: `./assets/frames/${group.folder}/${group.assetName ?? group.label} - ${fileColor} - ${group.orientation}.png`,
+    })),
+  );
+}
+
+const FRAME_SETS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(PRODUCT_CONFIGS).map(([key, config]) => [
+      key,
+      Object.freeze({
+        frames: Object.freeze(createFrames(config)),
+        geometry: Object.freeze(config.geometry),
+        defaults: Object.freeze(config.defaults),
+        config,
+      }),
+    ]),
+  ),
 );
+const FRAMES = FRAME_SETS[productKey].frames;
+const COMPANION_PRODUCT_KEY = productKey === "ipad" ? "iphone" : null;
 
 const MAX_SCREENSHOTS = 10;
 const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -262,6 +281,7 @@ const elements = {
   screenshotImage: document.querySelector("#screenshotImage"),
   screenshotName: document.querySelector("#screenshotName"),
   screenshotStatus: document.querySelector("#screenshotStatus"),
+  dropStatus: document.querySelector("#dropStatus"),
   pagePosition: document.querySelector("#pagePosition"),
   moveScreenshotPrevious: document.querySelector("#moveScreenshotPrevious"),
   moveScreenshotNext: document.querySelector("#moveScreenshotNext"),
@@ -286,6 +306,15 @@ const elements = {
   slotAssignmentPanel: document.querySelector("#slotAssignmentPanel"),
   slotAssignments: document.querySelector("#slotAssignments"),
   slotAssignmentHint: document.querySelector("#slotAssignmentHint"),
+  companionAssetPanel: document.querySelector("#companionAssetPanel"),
+  iphoneScreenshotInput: document.querySelector("#iphoneScreenshotInput"),
+  iphoneScreenshotAddButton: document.querySelector("#iphoneScreenshotAddButton"),
+  iphoneAssetList: document.querySelector("#iphoneAssetList"),
+  iphoneFitSelect: document.querySelector("#iphoneFitSelect"),
+  deleteIphoneAsset: document.querySelector("#deleteIphoneAsset"),
+  iphoneScreenshotStatus: document.querySelector("#iphoneScreenshotStatus"),
+  iphoneFrameField: document.querySelector("#iphoneFrameField"),
+  iphoneFrameSelect: document.querySelector("#iphoneFrameSelect"),
   annotationPanel: document.querySelector("#annotationPanel"),
   annotationsToggle: document.querySelector("#annotationsToggle"),
   annotationFields: document.querySelector("#annotationFields"),
@@ -372,9 +401,11 @@ function applyProductConfiguration() {
 const params = new URLSearchParams(window.location.search);
 const isRenderMode = params.get("render") === "1";
 let nextPageId = 1;
+let nextCompanionAssetId = 1;
 let isImporting = false;
 let isExporting = false;
 let compositionPointerDrag = null;
+let dropStatusTimer = null;
 
 function createPage({
   title,
@@ -392,6 +423,7 @@ function createPage({
   layoutId = "classic",
   layoutTuning,
   slotOverrides,
+  companionAssetId = null,
   annotations,
 }) {
   const layoutState = LAYOUT_ENGINE
@@ -423,6 +455,7 @@ function createPage({
     isAuxiliary,
     imageState,
     annotationOverflow: false,
+    companionAssetId,
     ...layoutState,
   };
 }
@@ -436,6 +469,30 @@ function createDefaultPage() {
     fit: DEFAULTS.fit,
     isSample: true,
   });
+}
+
+function createCompanionAsset({
+  screenshot,
+  screenshotName,
+  fit = PRODUCT_CONFIGS.iphone.defaults.fit,
+  imageWidth = null,
+  imageHeight = null,
+  objectUrl = null,
+  imageState = screenshot ? "loading" : "empty",
+  validationError = null,
+}) {
+  return {
+    id: `iphone-asset-${nextCompanionAssetId++}`,
+    product: "iphone",
+    screenshot,
+    screenshotName,
+    fit: normalizeFitModeForProduct("iphone", fit),
+    imageWidth,
+    imageHeight,
+    objectUrl,
+    imageState,
+    validationError,
+  };
 }
 
 const screenshotParam = params.get("screenshot");
@@ -492,8 +549,27 @@ if (LAYOUT_ENGINE && isRenderMode) {
   }
 }
 
+const initialCompanionAssets = [];
+const iphoneScreenshotParam = productKey === "ipad" ? params.get("iphoneScreenshot") : null;
+if (iphoneScreenshotParam?.trim()) {
+  const companionAsset = createCompanionAsset({
+    screenshot: iphoneScreenshotParam,
+    screenshotName: "URL iPhone 截图",
+    fit: params.get("iphoneFit") ?? PRODUCT_CONFIGS.iphone.defaults.fit,
+  });
+  initialCompanionAssets.push(companionAsset);
+  const companionSlot = getPresetSlotDefinitions(initialPage).findIndex(
+    (slot) => slot.product === "iphone",
+  );
+  if (companionSlot >= 0) initialPage.companionAssetId = companionAsset.id;
+}
+
 const state = {
   frame: params.get("frame") ?? DEFAULTS.frame,
+  companionFrame:
+    productKey === "ipad"
+      ? params.get("iphoneFrame") ?? PRODUCT_CONFIGS.iphone.defaults.frame
+      : null,
   themeId: LAYOUT_ENGINE
     ? LAYOUT_ENGINE.normalizeThemeId(params.get("theme") ?? "porcelain")
     : null,
@@ -510,6 +586,7 @@ const state = {
     PRODUCT.layout.deviceTop.max,
   ),
   pages: initialPages,
+  companionAssets: initialCompanionAssets,
   activePageId: initialPage.id,
 };
 
@@ -526,10 +603,14 @@ function toPercent(value, whole) {
   return `${((value / whole) * 100).toFixed(6)}%`;
 }
 
-function normalizeFitMode(fit) {
+function normalizeFitModeForProduct(targetProduct, fit) {
   const availableModes =
-    productKey === "ipad" ? ["fill", "cover", "contain"] : ["cover", "contain"];
-  return availableModes.includes(fit) ? fit : DEFAULTS.fit;
+    targetProduct === "ipad" ? ["fill", "cover", "contain"] : ["cover", "contain"];
+  return availableModes.includes(fit) ? fit : PRODUCT_CONFIGS[targetProduct].defaults.fit;
+}
+
+function normalizeFitMode(fit) {
+  return normalizeFitModeForProduct(productKey, fit);
 }
 
 function getClosestFrameIdForImage(width, height, currentFrameId = state.frame) {
@@ -577,9 +658,39 @@ function releaseAllPages() {
   state.pages.forEach(releasePage);
 }
 
+function releaseAllAssets() {
+  releaseAllPages();
+  state.companionAssets.forEach(releasePage);
+}
+
 function setScreenshotStatus(message, isError = false) {
   elements.screenshotStatus.textContent = message;
   elements.screenshotStatus.classList.toggle("is-error", isError);
+}
+
+function showCanvasDropStatus(message, isError = false) {
+  if (!elements.dropStatus) return;
+  if (dropStatusTimer) {
+    window.clearTimeout(dropStatusTimer);
+    dropStatusTimer = null;
+  }
+  elements.dropStatus.textContent = message;
+  elements.dropStatus.classList.toggle("is-error", isError);
+  elements.dropStatus.hidden = !message;
+  if (!message) return;
+  dropStatusTimer = window.setTimeout(() => {
+    elements.dropStatus.hidden = true;
+    dropStatusTimer = null;
+  }, 3600);
+}
+
+function setDropFeedback(message, isError = false, targetProduct = productKey) {
+  if (targetProduct !== productKey && elements.iphoneScreenshotStatus) {
+    setCompanionScreenshotStatus(message, isError);
+  } else {
+    setScreenshotStatus(message, isError);
+  }
+  showCanvasDropStatus(message, isError);
 }
 
 function populateFrameSelect() {
@@ -596,6 +707,45 @@ function populateFrameSelect() {
 
     elements.frameSelect.append(optgroup);
   }
+}
+
+function populateCompanionFrameSelect() {
+  if (!elements.iphoneFrameSelect || !COMPANION_PRODUCT_KEY) return;
+  const frameSet = FRAME_SETS[COMPANION_PRODUCT_KEY];
+  for (const group of frameSet.config.frameGroups) {
+    const optgroup = document.createElement("optgroup");
+    optgroup.label = group.label;
+    for (const frame of frameSet.frames.filter((item) => item.groupLabel === group.label)) {
+      const option = document.createElement("option");
+      option.value = frame.id;
+      option.textContent = frame.label;
+      optgroup.append(option);
+    }
+    elements.iphoneFrameSelect.append(optgroup);
+  }
+}
+
+function getFrameContext(targetProduct, frameId) {
+  const frameSet = FRAME_SETS[targetProduct] ?? FRAME_SETS[productKey];
+  const fallbackId = frameSet.defaults.frame;
+  const frame = frameSet.frames.find((item) => item.id === frameId) ??
+    frameSet.frames.find((item) => item.id === fallbackId) ??
+    frameSet.frames[0];
+  return {
+    product: targetProduct,
+    frame,
+    geometry: frameSet.geometry[frame.model],
+    config: frameSet.config,
+  };
+}
+
+function getNodeFrameContext(node, snapshot = null) {
+  const targetProduct = node.product ?? productKey;
+  const frameId =
+    targetProduct === productKey
+      ? snapshot?.frame ?? state.frame
+      : snapshot?.companionFrame ?? state.companionFrame;
+  return getFrameContext(targetProduct, frameId);
 }
 
 function applyFrame(frameId) {
@@ -633,9 +783,52 @@ function getLayoutPreset(page = getActivePage()) {
   return LAYOUT_ENGINE.LAYOUT_PRESETS[LAYOUT_ENGINE.normalizeLayoutId(page.layoutId)];
 }
 
+function getPresetSlotDefinitions(page = getActivePage()) {
+  const preset = getLayoutPreset(page);
+  if (!preset) return [{ product: productKey, role: "primary", label: "主屏" }];
+  if (preset.slots) return preset.slots;
+  return Array.from({ length: preset.slotCount }, (_, index) => ({
+    product: productKey,
+    role: index === 0 ? "primary" : "support",
+    label: `第 ${index + 1} 屏`,
+  }));
+}
+
+function isCrossDevicePreset(preset = getLayoutPreset()) {
+  return Boolean(preset?.slots?.some((slot) => slot.product !== productKey));
+}
+
+function getStoredSlotOverride(page, slotIndex, definition) {
+  return definition.product === productKey
+    ? page.slotOverrides[slotIndex]
+    : page.companionAssetId;
+}
+
+function deleteStoredSlotOverride(page, slotIndex, definition) {
+  if (definition.product === productKey) delete page.slotOverrides[slotIndex];
+  else page.companionAssetId = null;
+}
+
 function resolvePageSlots(page = getActivePage()) {
   if (!LAYOUT_ENGINE) return [page];
   const preset = getLayoutPreset(page);
+  if (preset.slots && LAYOUT_ENGINE.resolveTypedSlots) {
+    const typedOverrides = { ...page.slotOverrides };
+    preset.slots.forEach((slot, index) => {
+      if (slot.product !== productKey) typedOverrides[index] = page.companionAssetId;
+      else if (slot.role === "primary") delete typedOverrides[index];
+    });
+    return LAYOUT_ENGINE.resolveTypedSlots({
+      pools: {
+        [productKey]: state.pages,
+        iphone: productKey === "iphone" ? state.pages : state.companionAssets,
+      },
+      activeProduct: productKey,
+      activeItemId: page.id,
+      slotOverrides: typedOverrides,
+      slots: preset.slots,
+    });
+  }
   return LAYOUT_ENGINE.resolveSlotPages(
     state.pages,
     page.id,
@@ -644,7 +837,7 @@ function resolvePageSlots(page = getActivePage()) {
   );
 }
 
-function getCompositionNodeHeight(node, geometry) {
+function getCompositionNodeHeight(node, geometry = getNodeFrameContext(node).geometry) {
   if (node.type === "detail") return node.height;
   if (node.type === "card") return node.width * (ARTBOARD.height / ARTBOARD.width);
   return node.width * (geometry.frameHeight / geometry.frameWidth);
@@ -740,11 +933,10 @@ function getPageLayoutValidation(page = getActivePage()) {
       top: scene.copy.top,
       bottom: scene.copy.top + copyHeight,
     };
-    const selectedFrame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
-    const geometry = MODEL_GEOMETRY[selectedFrame.model];
-    const overlapsVisual = scene.nodes.some((node) =>
-      rectanglesOverlap(copyBounds, getRotatedNodeBounds(node, geometry), 48),
-    );
+    const overlapsVisual = scene.nodes.some((node) => {
+      const geometry = getNodeFrameContext(node).geometry;
+      return rectanglesOverlap(copyBounds, getRotatedNodeBounds(node, geometry), 48);
+    });
     if (overlapsVisual) errors.push("标题或说明文案过长，已进入设备安全区");
   }
   return { valid: errors.length === 0, errors };
@@ -813,27 +1005,44 @@ function decorateCompositionSlot(wrapper, node, slotPage) {
   wrapper.dataset.slotIndex = String(node.slot);
   if (slotPage?.id) wrapper.dataset.pageId = slotPage.id;
   wrapper.dataset.hasScreenshot = String(Boolean(slotPage?.screenshot));
+  wrapper.dataset.product = node.product ?? productKey;
+  const deviceLabel = (node.product ?? productKey) === "iphone" ? "iPhone" : "iPad";
   wrapper.title = slotPage?.screenshot
-    ? `图 ${node.slot + 1}：${slotPage.screenshotName}；拖动可与其他图片交换`
-    : `图 ${node.slot + 1}：可将本地图片拖入此处`;
+    ? `${deviceLabel} · ${slotPage.screenshotName}；同设备槽位之间可交换`
+    : `${deviceLabel}：可将对应设备截图拖入此处`;
 
   const badge = document.createElement("span");
   badge.className = "composition-slot-badge";
   badge.setAttribute("aria-hidden", "true");
-  badge.textContent = `图 ${node.slot + 1}`;
+  badge.textContent = deviceLabel;
   wrapper.append(badge);
 }
 
-function trackCompositionImage(image, page, placeholder) {
+function getImageValidationError(targetProduct, width, height) {
+  if (targetProduct === "iphone" && width >= height) return "iPhone 辅助截图应为竖版";
+  return null;
+}
+
+function trackCompositionImage(image, page, placeholder, targetProduct = productKey) {
   if (!page?.screenshot) return;
   page.imageState = page.imageState === "ready" ? "ready" : "loading";
   image.crossOrigin = "anonymous";
   image.alt = "";
   image.onload = () => {
-    page.imageState = "ready";
     page.imageWidth ??= image.naturalWidth;
     page.imageHeight ??= image.naturalHeight;
+    page.validationError = getImageValidationError(
+      targetProduct,
+      image.naturalWidth,
+      image.naturalHeight,
+    );
+    page.imageState = page.validationError ? "error" : "ready";
+    image.hidden = Boolean(page.validationError);
     placeholder.hidden = true;
+    if (page.validationError) {
+      placeholder.hidden = false;
+      placeholder.textContent = page.validationError;
+    }
     updateRenderState();
     updatePageControls();
   };
@@ -848,7 +1057,7 @@ function trackCompositionImage(image, page, placeholder) {
   image.src = page.screenshot;
 }
 
-function createDeviceNode(node, slotPage, frame, geometry) {
+function createDeviceNode(node, slotPage, frame, geometry, frameConfig) {
   const wrapper = document.createElement("div");
   wrapper.className = "composition-device";
   wrapper.style.left = `${node.cx}px`;
@@ -876,7 +1085,9 @@ function createDeviceNode(node, slotPage, frame, geometry) {
     slotPage?.screenshot ? "正在读取截图" : `缺少第 ${node.slot + 1} 张截图`,
   );
   screen.append(screenshot, placeholder);
-  if (slotPage?.screenshot) trackCompositionImage(screenshot, slotPage, placeholder);
+  if (slotPage?.screenshot) {
+    trackCompositionImage(screenshot, slotPage, placeholder, node.product ?? productKey);
+  }
 
   const frameImage = document.createElement("img");
   frameImage.className = "composition-frame";
@@ -887,7 +1098,7 @@ function createDeviceNode(node, slotPage, frame, geometry) {
     updateRenderState();
   };
   frameImage.onerror = () => {
-    frameImage.dataset.loadError = `${PRODUCT.frameLoadLabel}无法读取`;
+    frameImage.dataset.loadError = `${frameConfig.frameLoadLabel}无法读取`;
     updateRenderState();
   };
   frameImage.src = frame.src;
@@ -921,7 +1132,10 @@ function createCardNode(node, slotPage) {
 
 function createDetailNode(node, slotPage) {
   const wrapper = document.createElement("div");
-  wrapper.className = "composition-detail";
+  wrapper.className = "composition-detail composition-drop-proxy";
+  wrapper.dataset.slotIndex = String(node.slot);
+  wrapper.dataset.product = node.product ?? productKey;
+  wrapper.title = "细节窗使用主截图；可将图片拖入此处替换主截图";
   wrapper.style.left = `${node.cx}px`;
   wrapper.style.top = `${node.top}px`;
   wrapper.style.width = `${node.width}px`;
@@ -1057,17 +1271,22 @@ function applyComposition(page = getActivePage()) {
   elements.compositionLayer.hidden = false;
   elements.compositionLayer.replaceChildren();
   const slots = resolvePageSlots(page);
-  const selectedFrame = FRAMES.find((item) => item.id === state.frame) ?? FRAMES[0];
-  const geometry = MODEL_GEOMETRY[selectedFrame.model];
 
   scene.nodes.forEach((node) => {
     const slotPage = slots[node.slot];
+    const frameContext = getNodeFrameContext(node);
     const element =
       node.type === "card"
         ? createCardNode(node, slotPage)
         : node.type === "detail"
           ? createDetailNode(node, slotPage)
-          : createDeviceNode(node, slotPage, selectedFrame, geometry);
+          : createDeviceNode(
+              node,
+              slotPage,
+              frameContext.frame,
+              frameContext.geometry,
+              frameContext.config,
+            );
     elements.compositionLayer.append(element);
   });
 
@@ -1224,10 +1443,13 @@ function createLayoutThumbnail(preset) {
   thumbnail.style.height = `${thumbnailSize.height}px`;
   const scaleX = thumbnailSize.width / LAYOUT_ENGINE.ARTBOARD.width;
   const scaleY = thumbnailSize.height / LAYOUT_ENGINE.ARTBOARD.height;
-  const selectedFrame = FRAMES.find((item) => item.id === DEFAULTS.frame) ?? FRAMES[0];
-  const geometry = MODEL_GEOMETRY[selectedFrame.model];
 
   scene.nodes.forEach((node) => {
+    const targetProduct = node.product ?? productKey;
+    const frameSet = FRAME_SETS[targetProduct];
+    const selectedFrame =
+      frameSet.frames.find((item) => item.id === frameSet.defaults.frame) ?? frameSet.frames[0];
+    const geometry = frameSet.geometry[selectedFrame.model];
     const miniature = document.createElement("i");
     miniature.className = `layout-thumbnail-device${
       node.type === "card" ? " is-card" : ""
@@ -1235,12 +1457,9 @@ function createLayoutThumbnail(preset) {
     miniature.style.left = `${node.cx * scaleX}px`;
     miniature.style.top = `${node.top * scaleY}px`;
     miniature.style.width = `${Math.max(4, node.width * scaleX)}px`;
-    const nodeHeight =
-      productKey === "iphone"
-        ? node.width * 2.04
-        : getCompositionNodeHeight(node, geometry);
+    const nodeHeight = getCompositionNodeHeight(node, geometry);
     miniature.style.height = `${Math.max(
-      productKey === "iphone" ? 9 : 3,
+      targetProduct === "iphone" ? 9 : 3,
       nodeHeight * scaleY,
     )}px`;
     miniature.style.zIndex = String(node.z);
@@ -1250,15 +1469,14 @@ function createLayoutThumbnail(preset) {
 
   const slotCount = document.createElement("span");
   slotCount.className = "layout-card-slot-count";
-  slotCount.textContent = `${preset.slotCount}图`;
+  slotCount.textContent = preset.badge ?? `${preset.slotCount}图`;
   thumbnail.append(slotCount);
   return thumbnail;
 }
 
 function populateLayoutGallery() {
   if (!LAYOUT_ENGINE || !elements.layoutGallery) return;
-  const fragment = document.createDocumentFragment();
-  Object.values(LAYOUT_ENGINE.LAYOUT_PRESETS).forEach((preset) => {
+  const createCard = (preset) => {
     const button = document.createElement("button");
     button.className = "layout-card";
     button.type = "button";
@@ -1274,8 +1492,45 @@ function populateLayoutGallery() {
     description.textContent = preset.description;
     copy.append(title, description);
     button.append(createLayoutThumbnail(preset), copy);
-    fragment.append(button);
-  });
+    return button;
+  };
+
+  const fragment = document.createDocumentFragment();
+  const presets = Object.values(LAYOUT_ENGINE.LAYOUT_PRESETS);
+  if (productKey === "ipad" && presets.some((preset) => preset.category === "ecosystem")) {
+    for (const group of [
+      {
+        id: "ipad",
+        label: "iPad 单设备",
+        hint: "专注大屏体验",
+        presets: presets.filter((preset) => preset.category !== "ecosystem"),
+      },
+      {
+        id: "ecosystem",
+        label: "跨设备协同",
+        hint: "需要 1 张 iPhone 截图",
+        presets: presets.filter((preset) => preset.category === "ecosystem"),
+      },
+    ]) {
+      const section = document.createElement("section");
+      section.className = "layout-gallery-group";
+      section.dataset.layoutGroup = group.id;
+      const heading = document.createElement("div");
+      heading.className = "layout-gallery-group-label";
+      const label = document.createElement("span");
+      label.textContent = group.label;
+      const hint = document.createElement("small");
+      hint.textContent = group.hint;
+      heading.append(label, hint);
+      const grid = document.createElement("div");
+      grid.className = "layout-gallery-grid";
+      group.presets.forEach((preset) => grid.append(createCard(preset)));
+      section.append(heading, grid);
+      fragment.append(section);
+    }
+  } else {
+    presets.forEach((preset) => fragment.append(createCard(preset)));
+  }
   elements.layoutGallery.replaceChildren(fragment);
 }
 
@@ -1308,31 +1563,48 @@ function renderSlotAssignments(page, preset, slots) {
   elements.slotAssignments.replaceChildren();
   if (preset.slotCount <= 1) return;
 
-  const existingIds = new Set(state.pages.map((item) => item.id));
+  const slotDefinitions = getPresetSlotDefinitions(page);
   Object.keys(page.slotOverrides).forEach((slot) => {
-    if (
-      !existingIds.has(page.slotOverrides[slot]) ||
-      (Number(slot) === 0 && page.slotOverrides[slot] === page.id)
-    ) {
+    const slotIndex = Number(slot);
+    const definition = slotDefinitions[slotIndex];
+    if (definition?.product !== productKey) return;
+    const pool = state.pages;
+    if (!pool?.some((item) => item.id === page.slotOverrides[slot])) {
       delete page.slotOverrides[slot];
     }
   });
+  if (
+    isCrossDevicePreset(preset) &&
+    page.companionAssetId &&
+    !state.companionAssets.some((asset) => asset.id === page.companionAssetId)
+  ) {
+    page.companionAssetId = null;
+  }
 
   for (let slot = 0; slot < preset.slotCount; slot += 1) {
-    if (page.slotOverrides[slot] && slots[slot]?.id !== page.slotOverrides[slot]) {
-      delete page.slotOverrides[slot];
+    const definition = slotDefinitions[slot];
+    const candidatePool =
+      definition.product === productKey ? state.pages : state.companionAssets;
+    const isFixedPrimary =
+      isCrossDevicePreset(preset) &&
+      definition.product === productKey &&
+      definition.role === "primary";
+    const storedOverride = getStoredSlotOverride(page, slot, definition);
+    if (!isFixedPrimary && storedOverride && slots[slot]?.id !== storedOverride) {
+      deleteStoredSlotOverride(page, slot, definition);
     }
 
     const field = document.createElement("label");
     field.className = "slot-field";
-    field.textContent = `第 ${slot + 1} 屏`;
+    field.textContent = definition.label;
     const select = document.createElement("select");
     select.dataset.slotIndex = String(slot);
+    select.dataset.slotProduct = definition.product;
 
     const automatic = document.createElement("option");
     automatic.value = "";
     automatic.textContent =
-      slot === 0
+      isFixedPrimary || (slot === 0 && definition.product === productKey)
         ? `当前 · ${page.screenshotName}`
         : slots[slot]
           ? `自动 · ${slots[slot].screenshotName}`
@@ -1344,15 +1616,21 @@ function renderSlotAssignments(page, preset, slots) {
         .filter((slotPage, index) => index !== slot && slotPage)
         .map((slotPage) => slotPage.id),
     );
-    state.pages.forEach((candidate) => {
-      if (candidate.isAuxiliary || (slot === 0 && candidate.id === page.id)) return;
+    candidatePool.forEach((candidate) => {
+      if (
+        isFixedPrimary ||
+        candidate.isAuxiliary ||
+        (slot === 0 && candidate.id === page.id)
+      ) {
+        return;
+      }
       const option = document.createElement("option");
       option.value = candidate.id;
       option.textContent = candidate.screenshotName;
       option.disabled = usedByOtherSlots.has(candidate.id);
       select.append(option);
     });
-    select.value = page.slotOverrides[slot] ?? "";
+    select.value = isFixedPrimary ? "" : getStoredSlotOverride(page, slot, definition) ?? "";
     field.append(select);
     elements.slotAssignments.append(field);
   }
@@ -1360,9 +1638,74 @@ function renderSlotAssignments(page, preset, slots) {
   const validation = getPageLayoutValidation(page);
   const missingError = validation.errors.find((error) => error.includes("槽位为空"));
   elements.slotAssignmentHint.textContent = missingError
-    ? `${missingError}；添加截图或手动选择后才能导出。`
-    : "可在预览中拖动图片互换，或将本地图片拖入边框；下拉选择仍可精确指定。";
+    ? `${missingError}；添加对应设备截图后才能导出。`
+    : isCrossDevicePreset(preset)
+      ? "iPad 主屏固定为当前宣传图；iPhone 仅作为辅助素材，不进入导出顺序。"
+      : "可在预览中拖动图片互换，或将本地图片拖入边框；下拉选择仍可精确指定。";
   elements.slotAssignmentHint.classList.toggle("is-error", Boolean(missingError));
+}
+
+function setCompanionScreenshotStatus(message, isError = false) {
+  if (!elements.iphoneScreenshotStatus) return;
+  elements.iphoneScreenshotStatus.textContent = message;
+  elements.iphoneScreenshotStatus.classList.toggle("is-error", isError);
+}
+
+function renderCompanionAssets(page, preset, slots) {
+  if (!elements.companionAssetPanel) return;
+  const companionSlot = getPresetSlotDefinitions(page).findIndex(
+    (slot) => slot.product !== productKey,
+  );
+  const visible = isCrossDevicePreset(preset) && companionSlot >= 0;
+  elements.companionAssetPanel.hidden = !visible;
+  if (elements.iphoneFrameField) elements.iphoneFrameField.hidden = !visible;
+  if (!visible) return;
+
+  const selectedAsset = slots[companionSlot] ?? null;
+  const frameContext = getFrameContext("iphone", state.companionFrame);
+  state.companionFrame = frameContext.frame.id;
+  if (elements.iphoneFrameSelect) elements.iphoneFrameSelect.value = state.companionFrame;
+
+  const fragment = document.createDocumentFragment();
+  if (state.companionAssets.length === 0) {
+    const empty = document.createElement("span");
+    empty.className = "companion-asset-empty";
+    empty.textContent = "还没有 iPhone 辅助截图";
+    fragment.append(empty);
+  } else {
+    state.companionAssets.forEach((asset) => {
+      const button = document.createElement("button");
+      button.className = "companion-asset-card";
+      button.type = "button";
+      button.dataset.companionAssetId = asset.id;
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", String(asset.id === selectedAsset?.id));
+      button.title = asset.screenshotName;
+      const thumbnail = document.createElement("img");
+      thumbnail.alt = "";
+      thumbnail.crossOrigin = "anonymous";
+      thumbnail.src = asset.screenshot;
+      const name = document.createElement("span");
+      name.textContent = asset.screenshotName;
+      button.append(thumbnail, name);
+      fragment.append(button);
+    });
+  }
+  elements.iphoneAssetList.replaceChildren(fragment);
+  elements.iphoneFitSelect.value = selectedAsset?.fit ?? PRODUCT_CONFIGS.iphone.defaults.fit;
+  elements.iphoneFitSelect.disabled = !selectedAsset || isImporting || isExporting;
+  elements.deleteIphoneAsset.disabled = !selectedAsset || isImporting || isExporting;
+  elements.iphoneScreenshotInput.disabled =
+    isImporting || isExporting || state.companionAssets.length >= MAX_SCREENSHOTS;
+  elements.iphoneScreenshotAddButton.setAttribute(
+    "aria-disabled",
+    String(isImporting || isExporting || state.companionAssets.length >= MAX_SCREENSHOTS),
+  );
+  if (!selectedAsset) {
+    setCompanionScreenshotStatus("添加一张真实的竖版 iPhone 截图后即可导出。", true);
+  } else if (!selectedAsset.validationError) {
+    setCompanionScreenshotStatus("iPhone 截图只服务当前跨设备构图，不会单独导出。");
+  }
 }
 
 function renderAnnotationFields(page, preset) {
@@ -1464,6 +1807,7 @@ function renderLayoutEditor(page = getActivePage()) {
   });
   applyTheme();
   renderSlotAssignments(page, preset, slots);
+  renderCompanionAssets(page, preset, slots);
   renderAnnotationFields(page, preset);
   renderTuningControls(page, preset);
 }
@@ -1562,6 +1906,14 @@ function updatePageControls() {
   elements.slotAssignments?.querySelectorAll("select").forEach((select) => {
     select.disabled = isLocked;
   });
+  if (elements.iphoneFrameSelect) elements.iphoneFrameSelect.disabled = isLocked;
+  elements.iphoneAssetList?.querySelectorAll("button").forEach((button) => {
+    button.disabled = isLocked;
+  });
+  if (elements.iphoneScreenshotInput) {
+    elements.iphoneScreenshotInput.disabled =
+      isLocked || state.companionAssets.length >= MAX_SCREENSHOTS;
+  }
   elements.annotationsToggle && (elements.annotationsToggle.disabled = isLocked);
   elements.annotationFields?.querySelectorAll("input").forEach((input) => {
     input.disabled = isLocked;
@@ -2204,7 +2556,7 @@ function drawCompositionAnnotations(context, snapshot, scene, theme) {
   });
 }
 
-function drawCompositionPoster(context, snapshot, screenshotImages, frameImage) {
+function drawCompositionPoster(context, snapshot, screenshotImages, frameImages) {
   const theme = LAYOUT_ENGINE.THEMES[snapshot.themeId];
   const scene = LAYOUT_ENGINE.resolveComposition({
     layoutId: snapshot.layoutId,
@@ -2212,8 +2564,6 @@ function drawCompositionPoster(context, snapshot, screenshotImages, frameImage) 
     classicDeviceWidth: snapshot.deviceWidth,
     classicDeviceTop: snapshot.deviceTop,
   });
-  const frame = FRAMES.find((item) => item.id === snapshot.frame) ?? FRAMES[0];
-  const geometry = MODEL_GEOMETRY[frame.model];
   fillCompositionBackground(context, theme);
 
   scene.nodes.forEach((node) => {
@@ -2224,12 +2574,13 @@ function drawCompositionPoster(context, snapshot, screenshotImages, frameImage) 
     } else if (node.type === "detail") {
       drawCompositionDetail(context, node, screenshotImage, theme);
     } else {
+      const frameContext = getNodeFrameContext(node, snapshot);
       drawCompositionDevice(
         context,
         node,
         screenshotImage,
-        frameImage,
-        geometry,
+        frameImages[frameContext.product],
+        frameContext.geometry,
         slot.fit,
         theme,
       );
@@ -2343,6 +2694,7 @@ function createRenderSnapshot(page) {
     screenshotName: page.screenshotName,
     fit: page.fit,
     frame: state.frame,
+    companionFrame: state.companionFrame,
     deviceWidth: state.deviceWidth,
     deviceTop: state.deviceTop,
     titleLines: textLines.title,
@@ -2356,10 +2708,11 @@ function createRenderSnapshot(page) {
           labels: [...page.annotations.labels],
         }
       : { enabled: false, labels: [] },
-    slots: slots.map((slot) => ({
+    slots: slots.map((slot, index) => ({
       screenshot: slot?.screenshot ?? null,
       screenshotName: slot?.screenshotName ?? "截图",
       fit: slot?.fit ?? DEFAULTS.fit,
+      product: getPresetSlotDefinitions(page)[index]?.product ?? productKey,
     })),
   });
 }
@@ -2377,20 +2730,34 @@ function createExportCanvas() {
   return { canvas, context };
 }
 
-async function renderSnapshotToBlob(snapshot, canvas, context, frameImage, imageCache) {
+async function renderSnapshotToBlob(snapshot, canvas, context, imageCache) {
   const loadCachedImage = (source, label) => {
     if (!imageCache.has(source)) imageCache.set(source, loadImage(source, label));
     return imageCache.get(source);
   };
   context.clearRect(0, 0, ARTBOARD.width, ARTBOARD.height);
+  const activeFrameContext = getFrameContext(productKey, snapshot.frame);
+  const activeFrameImage = await loadCachedImage(
+    activeFrameContext.frame.src,
+    activeFrameContext.config.frameLoadLabel,
+  );
   if (!LAYOUT_ENGINE || (snapshot.layoutId === "classic" && snapshot.themeId === "porcelain")) {
     const screenshotImage = await loadCachedImage(snapshot.screenshot, snapshot.screenshotName);
-    drawPoster(context, snapshot, screenshotImage, frameImage);
+    drawPoster(context, snapshot, screenshotImage, activeFrameImage);
   } else {
     const screenshotImages = await Promise.all(
       snapshot.slots.map((slot) => loadCachedImage(slot.screenshot, slot.screenshotName)),
     );
-    drawCompositionPoster(context, snapshot, screenshotImages, frameImage);
+    const frameImages = { [productKey]: activeFrameImage };
+    for (const targetProduct of new Set(snapshot.slots.map((slot) => slot.product))) {
+      if (targetProduct === productKey) continue;
+      const frameContext = getFrameContext(targetProduct, snapshot.companionFrame);
+      frameImages[targetProduct] = await loadCachedImage(
+        frameContext.frame.src,
+        frameContext.config.frameLoadLabel,
+      );
+    }
+    drawCompositionPoster(context, snapshot, screenshotImages, frameImages);
   }
   return canvasToPngBlob(canvas);
 }
@@ -2420,15 +2787,13 @@ async function exportPages(pageIds, mode) {
     await (document.fonts?.ready ?? Promise.resolve());
 
     const snapshots = pages.map(createRenderSnapshot);
-    const selectedFrame = FRAMES.find((item) => item.id === snapshots[0].frame) ?? FRAMES[0];
-    const frameImage = await loadImage(selectedFrame.src, PRODUCT.frameLoadLabel);
     const { canvas, context } = createExportCanvas();
     const imageCache = new Map();
     const downloads = [];
 
     for (const [index, snapshot] of snapshots.entries()) {
       setExportStatus(`正在生成 ${index + 1} / ${snapshots.length}…`);
-      const blob = await renderSnapshotToBlob(snapshot, canvas, context, frameImage, imageCache);
+      const blob = await renderSnapshotToBlob(snapshot, canvas, context, imageCache);
       downloads.push({ blob, fileName: getExportFileName(snapshot) });
     }
 
@@ -2468,7 +2833,7 @@ function isSupportedImageFile(file) {
   return ALLOWED_IMAGE_TYPES.has(file.type) || /\.(?:png|jpe?g|webp)$/i.test(file.name);
 }
 
-async function createUploadedPage(file, templatePage) {
+async function createUploadedPage(file, templatePage, { inheritLayout = false } = {}) {
   const objectUrl = URL.createObjectURL(file);
 
   try {
@@ -2483,11 +2848,113 @@ async function createUploadedPage(file, templatePage) {
       imageHeight: image.naturalHeight,
       objectUrl,
       imageState: "ready",
+      ...(inheritLayout
+        ? {
+            layoutId: templatePage.layoutId,
+            layoutTuning: templatePage.layoutTuning,
+            companionAssetId: templatePage.companionAssetId,
+            annotations: templatePage.annotations,
+          }
+        : {}),
     });
   } catch (error) {
     URL.revokeObjectURL(objectUrl);
     throw new Error(`${file.name} 无法读取`);
   }
+}
+
+async function createUploadedCompanionAsset(file) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl, file.name);
+    const validationError = getImageValidationError(
+      "iphone",
+      image.naturalWidth,
+      image.naturalHeight,
+    );
+    if (validationError) throw new Error(`${file.name}：${validationError}`);
+    return createCompanionAsset({
+      screenshot: objectUrl,
+      screenshotName: file.name,
+      imageWidth: image.naturalWidth,
+      imageHeight: image.naturalHeight,
+      objectUrl,
+      imageState: "ready",
+    });
+  } catch (error) {
+    URL.revokeObjectURL(objectUrl);
+    throw error;
+  }
+}
+
+function getCompanionSlotIndex(page = getActivePage()) {
+  return getPresetSlotDefinitions(page).findIndex((slot) => slot.product !== productKey);
+}
+
+async function importCompanionScreenshots(fileList) {
+  const files = Array.from(fileList);
+  if (files.length === 0 || isImporting || isExporting) return;
+  const unsupportedFile = files.find((file) => !isSupportedImageFile(file));
+  if (unsupportedFile) {
+    setCompanionScreenshotStatus(`未添加：${unsupportedFile.name} 不是支持的图片格式。`, true);
+    return;
+  }
+  if (state.companionAssets.length + files.length > MAX_SCREENSHOTS) {
+    setCompanionScreenshotStatus(`未添加：iPhone 辅助素材最多 ${MAX_SCREENSHOTS} 张。`, true);
+    return;
+  }
+
+  const page = getActivePage();
+  const companionSlot = getCompanionSlotIndex(page);
+  if (companionSlot < 0) return;
+  isImporting = true;
+  setCompanionScreenshotStatus(`正在读取 ${files.length} 张 iPhone 截图…`);
+  updatePageControls();
+  const importedAssets = [];
+  let finalStatus = "";
+  let finalStatusIsError = false;
+
+  try {
+    for (const file of files) importedAssets.push(await createUploadedCompanionAsset(file));
+    state.companionAssets.push(...importedAssets);
+    page.companionAssetId = importedAssets[0].id;
+    applyComposition(page);
+    renderLayoutEditor(page);
+    finalStatus = `已添加 ${importedAssets.length} 张 iPhone 辅助截图。`;
+    setExportStatus("");
+  } catch (error) {
+    importedAssets.forEach(releasePage);
+    finalStatus = `未添加：${error.message}`;
+    finalStatusIsError = true;
+  } finally {
+    isImporting = false;
+    renderLayoutEditor(page);
+    updatePageControls();
+    setCompanionScreenshotStatus(finalStatus, finalStatusIsError);
+  }
+}
+
+function deleteSelectedCompanionAsset() {
+  if (isImporting || isExporting) return;
+  const page = getActivePage();
+  const companionSlot = getCompanionSlotIndex(page);
+  const selectedAsset = resolvePageSlots(page)[companionSlot];
+  if (!selectedAsset) return;
+  state.companionAssets = state.companionAssets.filter((asset) => asset.id !== selectedAsset.id);
+  state.pages.forEach((item) => {
+    if (item.companionAssetId === selectedAsset.id) item.companionAssetId = null;
+  });
+  releasePage(selectedAsset);
+  applyComposition(page);
+  renderLayoutEditor(page);
+  updatePageControls();
+  setCompanionScreenshotStatus(
+    state.companionAssets.length > 0
+      ? `已移除 ${selectedAsset.screenshotName}；已自动回退到下一张可用素材。`
+      : `已移除 ${selectedAsset.screenshotName}；请添加新的 iPhone 辅助截图。`,
+    state.companionAssets.length === 0,
+  );
+  setExportStatus("");
 }
 
 async function importScreenshots(fileList) {
@@ -2552,11 +3019,26 @@ async function importScreenshots(fileList) {
 }
 
 function setCompositionSlotAssignment(page, slotIndex, slotPage) {
+  const definition = getPresetSlotDefinitions(page)[slotIndex];
+  if (definition?.product !== productKey) {
+    page.companionAssetId = slotPage.id;
+    return;
+  }
   if (slotIndex === 0 && slotPage.id === page.id) {
     delete page.slotOverrides[0];
     return;
   }
   page.slotOverrides[slotIndex] = slotPage.id;
+}
+
+function isFixedPrimaryDropSlot(page, slotIndex) {
+  const preset = getLayoutPreset(page);
+  const definition = getPresetSlotDefinitions(page)[slotIndex];
+  return (
+    definition?.product === productKey &&
+    definition.role === "primary" &&
+    (preset.slotCount === 1 || Boolean(preset.slots))
+  );
 }
 
 function swapCompositionSlots(sourceSlot, targetSlot) {
@@ -2576,6 +3058,11 @@ function swapCompositionSlots(sourceSlot, targetSlot) {
   }
 
   const slots = resolvePageSlots(page);
+  const slotDefinitions = getPresetSlotDefinitions(page);
+  if (slotDefinitions[sourceSlot].product !== slotDefinitions[targetSlot].product) {
+    setScreenshotStatus("iPad 与 iPhone 槽位承担不同角色，不能互换。", true);
+    return;
+  }
   const sourcePage = slots[sourceSlot];
   const targetPage = slots[targetSlot];
   if (!sourcePage?.screenshot || !targetPage?.screenshot) {
@@ -2593,60 +3080,138 @@ function swapCompositionSlots(sourceSlot, targetSlot) {
 }
 
 async function fillCompositionSlotFromFiles(fileList, targetSlot) {
-  const files = Array.from(fileList);
-  if (isImporting || isExporting || files.length === 0) return;
+  const files = Array.from(fileList ?? []);
+  const page = getActivePage();
+  const preset = getLayoutPreset(page);
+  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= preset.slotCount) return;
+  const targetProduct = getPresetSlotDefinitions(page)[targetSlot].product;
+  const isCompanionTarget = targetProduct !== productKey;
+  if (isImporting || isExporting) {
+    setDropFeedback("当前任务尚未完成，请稍后再拖入图片。", true, targetProduct);
+    return;
+  }
+  if (files.length === 0) {
+    setDropFeedback("没有读取到图片文件；请从 Finder 拖入 PNG、JPEG 或 WebP。", true, targetProduct);
+    return;
+  }
   if (files.length !== 1) {
-    setScreenshotStatus("一次请只拖入 1 张图片。", true);
+    setDropFeedback("一次请只拖入 1 张图片。", true, targetProduct);
     return;
   }
 
   const file = files[0];
   if (!isSupportedImageFile(file)) {
-    setScreenshotStatus(`未填入：${file.name} 不是支持的图片格式。`, true);
+    setDropFeedback(`未填入：${file.name} 不是支持的图片格式。`, true, targetProduct);
     return;
   }
 
-  const page = getActivePage();
-  const preset = getLayoutPreset(page);
-  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= preset.slotCount) return;
-  if (getOutputPages().length >= MAX_SCREENSHOTS) {
-    setScreenshotStatus(`未填入：截图组最多 ${MAX_SCREENSHOTS} 张。`, true);
+  const targetPool = targetProduct === productKey ? getOutputPages() : state.companionAssets;
+  if (targetPool.length >= MAX_SCREENSHOTS) {
+    setDropFeedback(
+      `未填入：${isCompanionTarget ? "iPhone 辅助素材" : "截图组"}最多 ${MAX_SCREENSHOTS} 张。`,
+      true,
+      targetProduct,
+    );
     return;
   }
 
   isImporting = true;
-  setScreenshotStatus(`正在将 ${file.name} 填入图 ${targetSlot + 1}…`);
+  setDropFeedback(`正在将 ${file.name} 填入图 ${targetSlot + 1}…`, false, targetProduct);
   renderScreenshotList();
   updatePageControls();
 
   let importedPage = null;
+  const shouldActivateImportedPage = isFixedPrimaryDropSlot(page, targetSlot);
   try {
-    importedPage = await createUploadedPage(file, { ...page });
-    state.pages.push(importedPage);
-    setCompositionSlotAssignment(page, targetSlot, importedPage);
+    importedPage =
+      isCompanionTarget
+        ? await createUploadedCompanionAsset(file)
+        : await createUploadedPage(file, page, { inheritLayout: shouldActivateImportedPage });
+    if (isCompanionTarget) state.companionAssets.push(importedPage);
+    else state.pages.push(importedPage);
+    if (shouldActivateImportedPage) state.activePageId = importedPage.id;
+    else setCompositionSlotAssignment(page, targetSlot, importedPage);
   } catch (error) {
-    setScreenshotStatus(`未填入：${error.message}`, true);
+    setDropFeedback(`未填入：${error.message}`, true, targetProduct);
   } finally {
     isImporting = false;
   }
 
   if (importedPage) {
-    applyComposition(page);
-    renderLayoutEditor(page);
-    setScreenshotStatus(`已将 ${file.name} 填入图 ${targetSlot + 1}，并添加到截图组。`);
+    if (shouldActivateImportedPage) applyState();
+    else {
+      applyComposition(page);
+      renderLayoutEditor(page);
+    }
+    let successMessage = `已将 ${file.name} 填入图 ${targetSlot + 1}，并添加到截图组。`;
+    if (shouldActivateImportedPage) successMessage = `已将 ${file.name} 新增为当前宣传图。`;
+    else if (isCompanionTarget) {
+      successMessage = `已将 ${file.name} 填入 iPhone 辅助槽位，不会加入导出顺序。`;
+    }
+    setDropFeedback(successMessage, false, targetProduct);
     setExportStatus("");
   }
   renderScreenshotList();
   updatePageControls();
 }
 
-function dataTransferHasFiles(dataTransfer) {
-  return Array.from(dataTransfer?.types ?? []).includes("Files");
+function dataTransferHasDropPayload(dataTransfer) {
+  if (DRAG_DROP) return DRAG_DROP.hasSupportedPayload(dataTransfer);
+  return (
+    Array.from(dataTransfer?.files ?? []).length > 0 ||
+    Array.from(dataTransfer?.types ?? []).some(
+      (type) => String(type).toLowerCase() === "files",
+    )
+  );
+}
+
+function parseDropPayload(dataTransfer) {
+  if (DRAG_DROP) return DRAG_DROP.describePayload(dataTransfer);
+  const files = Array.from(dataTransfer?.files ?? []);
+  return {
+    kind: files.length > 0 ? "file" : "empty",
+    files,
+    urls: [],
+    types: Array.from(dataTransfer?.types ?? []),
+  };
+}
+
+function getCompositionDropTarget(target) {
+  if (!(target instanceof Element)) return null;
+  const directTarget = target.closest(
+    ".composition-slot[data-slot-index], .composition-drop-proxy[data-slot-index]",
+  );
+  if (directTarget && elements.artboard.contains(directTarget)) {
+    const slotIndex = Number(directTarget.dataset.slotIndex);
+    const highlightElement = directTarget.classList.contains("composition-drop-proxy")
+      ? (elements.compositionLayer?.querySelector(
+          `.composition-slot[data-slot-index="${slotIndex}"]`,
+        ) ?? directTarget)
+      : directTarget;
+    return {
+      element: highlightElement,
+      slotIndex,
+    };
+  }
+
+  const preset = getLayoutPreset();
+  if (preset.slotCount !== 1) return null;
+  const primaryElement =
+    elements.compositionLayer?.querySelector('.composition-slot[data-slot-index="0"]') ??
+    elements.device;
+  return { element: primaryElement, slotIndex: 0 };
+}
+
+function getDropTargetProduct(target) {
+  const definition = getPresetSlotDefinitions()[target?.slotIndex];
+  return definition?.product ?? productKey;
 }
 
 function clearCompositionDropTargets() {
-  elements.compositionLayer
-    ?.querySelectorAll(".composition-slot.is-drop-target")
+  elements.artboard
+    ?.querySelectorAll(
+      ".composition-slot.is-drop-target, .composition-drop-proxy.is-drop-target, #device.is-drop-target",
+    )
     .forEach((slot) => slot.classList.remove("is-drop-target"));
 }
 
@@ -2659,7 +3224,8 @@ function clearCompositionDragState() {
 }
 
 function resetState() {
-  const hasUserScreenshots = state.pages.some((page) => !page.isSample);
+  const hasUserScreenshots =
+    state.pages.some((page) => !page.isSample) || state.companionAssets.length > 0;
   if (
     hasUserScreenshots &&
     !window.confirm("恢复默认会移除已添加的全部截图和文案，是否继续？")
@@ -2667,17 +3233,21 @@ function resetState() {
     return;
   }
 
-  releaseAllPages();
+  releaseAllAssets();
   const defaultPage = createDefaultPage();
   state.frame = DEFAULTS.frame;
+  state.companionFrame =
+    productKey === "ipad" ? PRODUCT_CONFIGS.iphone.defaults.frame : null;
   if (LAYOUT_ENGINE) state.themeId = "porcelain";
   state.deviceWidth = DEFAULTS.deviceWidth;
   state.deviceTop = DEFAULTS.deviceTop;
   state.pages = [defaultPage];
+  state.companionAssets = [];
   state.activePageId = defaultPage.id;
   elements.screenshotInput.value = "";
   setExportStatus("");
   setScreenshotStatus("");
+  showCanvasDropStatus("");
   applyState();
 }
 
@@ -2759,11 +3329,52 @@ function bindEvents() {
     applyComposition();
   });
 
+  elements.iphoneFrameSelect?.addEventListener("change", (event) => {
+    state.companionFrame = getFrameContext("iphone", event.target.value).frame.id;
+    applyComposition();
+    setExportStatus("");
+  });
+
   elements.screenshotInput.addEventListener("change", (event) => {
     const files = Array.from(event.target.files);
     event.target.value = "";
     importScreenshots(files);
   });
+
+  elements.iphoneScreenshotInput?.addEventListener("change", (event) => {
+    const files = Array.from(event.target.files);
+    event.target.value = "";
+    void importCompanionScreenshots(files);
+  });
+
+  elements.iphoneAssetList?.addEventListener("click", (event) => {
+    const button = event.target.closest(".companion-asset-card[data-companion-asset-id]");
+    if (!button || isImporting || isExporting) return;
+    const page = getActivePage();
+    const companionSlot = getCompanionSlotIndex(page);
+    const asset = state.companionAssets.find(
+      (candidate) => candidate.id === button.dataset.companionAssetId,
+    );
+    if (companionSlot < 0 || !asset) return;
+    page.companionAssetId = asset.id;
+    applyComposition(page);
+    renderLayoutEditor(page);
+    updatePageControls();
+    setExportStatus("");
+  });
+
+  elements.iphoneFitSelect?.addEventListener("change", (event) => {
+    const page = getActivePage();
+    const companionSlot = getCompanionSlotIndex(page);
+    const asset = resolvePageSlots(page)[companionSlot];
+    if (!asset) return;
+    asset.fit = normalizeFitModeForProduct("iphone", event.target.value);
+    applyComposition(page);
+    renderLayoutEditor(page);
+    setExportStatus("");
+  });
+
+  elements.deleteIphoneAsset?.addEventListener("click", deleteSelectedCompanionAsset);
 
   elements.fitSelect.addEventListener("change", (event) => {
     const page = getActivePage();
@@ -2782,6 +3393,7 @@ function bindEvents() {
     const slot = event.target.closest(".composition-slot[data-slot-index]");
     if (
       !slot ||
+      document.body.classList.contains("preview-only") ||
       isImporting ||
       isExporting ||
       event.button !== 0 ||
@@ -2847,35 +3459,31 @@ function bindEvents() {
     finishCompositionPointerDrag(event, false);
   });
 
-  elements.compositionLayer?.addEventListener("dragover", (event) => {
-    const slot = event.target.closest(".composition-slot[data-slot-index]");
-    if (!slot || isImporting || isExporting || !dataTransferHasFiles(event.dataTransfer)) return;
-
-    event.preventDefault();
-    clearCompositionDropTargets();
-    slot.classList.add("is-drop-target");
-    event.dataTransfer.dropEffect = "copy";
-  });
-
-  elements.compositionLayer?.addEventListener("drop", (event) => {
-    const slot = event.target.closest(".composition-slot[data-slot-index]");
-    if (!slot || isImporting || isExporting) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    const targetSlot = Number(slot.dataset.slotIndex);
-    const files = Array.from(event.dataTransfer?.files ?? []);
-    clearCompositionDragState();
-
-    if (files.length > 0 || dataTransferHasFiles(event.dataTransfer)) {
-      void fillCompositionSlotFromFiles(files, targetSlot);
-    }
-  });
-
   elements.artboard.addEventListener("dragover", (event) => {
-    if (!LAYOUT_ENGINE || !dataTransferHasFiles(event.dataTransfer)) return;
+    if (!LAYOUT_ENGINE || !dataTransferHasDropPayload(event.dataTransfer)) return;
     event.preventDefault();
-    if (!event.target.closest(".composition-slot")) clearCompositionDropTargets();
+    if (isRenderMode) {
+      event.dataTransfer.dropEffect = "none";
+      clearCompositionDropTargets();
+      return;
+    }
+    if (isImporting || isExporting) {
+      event.dataTransfer.dropEffect = "none";
+      clearCompositionDropTargets();
+      showCanvasDropStatus("当前任务尚未完成，请稍后再拖入图片。", true);
+      return;
+    }
+
+    const target = getCompositionDropTarget(event.target);
+    clearCompositionDropTargets();
+    if (!target) {
+      event.dataTransfer.dropEffect = "none";
+      showCanvasDropStatus("请将图片拖到目标真机边框内。", true);
+      return;
+    }
+    showCanvasDropStatus("");
+    target.element.classList.add("is-drop-target");
+    event.dataTransfer.dropEffect = "copy";
   });
 
   elements.artboard.addEventListener("dragleave", (event) => {
@@ -2886,22 +3494,70 @@ function bindEvents() {
   });
 
   elements.artboard.addEventListener("drop", (event) => {
-    if (
-      !LAYOUT_ENGINE ||
-      !dataTransferHasFiles(event.dataTransfer) ||
-      event.target.closest(".composition-slot")
-    ) {
-      return;
-    }
+    if (!LAYOUT_ENGINE || !dataTransferHasDropPayload(event.dataTransfer)) return;
     event.preventDefault();
     clearCompositionDragState();
+    if (isRenderMode) return;
+
+    const target = getCompositionDropTarget(event.target);
+    const targetProduct = getDropTargetProduct(target);
+    if (isImporting || isExporting) {
+      setDropFeedback("当前任务尚未完成，请稍后再拖入图片。", true, targetProduct);
+      return;
+    }
+
     const preset = getLayoutPreset();
-    setScreenshotStatus(
-      preset?.slotCount > 1
-        ? "请将图片拖到目标真机边框内。"
-        : "请先选择多图排版，再将图片拖到目标真机边框内。",
-      true,
-    );
+    if (!target) {
+      setDropFeedback(
+        preset.slotCount > 1 ? "请将图片拖到目标真机边框内。" : "请将图片拖到画布内。",
+        true,
+      );
+      return;
+    }
+
+    const payload = parseDropPayload(event.dataTransfer);
+    if (payload.kind === "file") {
+      void fillCompositionSlotFromFiles(payload.files, target.slotIndex);
+      return;
+    }
+    if (payload.kind === "url") {
+      setDropFeedback(
+        "检测到网页图片链接；请先保存到本地，再拖入 PNG、JPEG 或 WebP 文件。",
+        true,
+        targetProduct,
+      );
+      return;
+    }
+    if (
+      payload.types.some((type) =>
+        ["files", "application/x-moz-file"].includes(String(type).toLowerCase()),
+      )
+    ) {
+      setDropFeedback(
+        "图片来源没有提供可读取的文件；请先保存到 Finder 后再拖入。",
+        true,
+        targetProduct,
+      );
+      return;
+    }
+    setDropFeedback("没有读取到可用图片；请拖入 PNG、JPEG 或 WebP 文件。", true, targetProduct);
+  });
+
+  window.addEventListener("dragover", (event) => {
+    if (!dataTransferHasDropPayload(event.dataTransfer)) return;
+    if (event.target instanceof Node && elements.artboard.contains(event.target)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+    if (!isRenderMode) showCanvasDropStatus("请将图片拖到宣传图画布内。", true);
+  });
+
+  window.addEventListener("drop", (event) => {
+    if (!dataTransferHasDropPayload(event.dataTransfer)) return;
+    if (event.target instanceof Node && elements.artboard.contains(event.target)) return;
+    event.preventDefault();
+    clearCompositionDragState();
+    if (isRenderMode) return;
+    setDropFeedback("请将图片拖到宣传图画布内。", true);
   });
 
   elements.moveScreenshotPrevious.addEventListener("click", () => moveActivePage(-1));
@@ -2946,9 +3602,11 @@ function bindEvents() {
     if (!select) return;
     const page = getActivePage();
     const slot = Number(select.dataset.slotIndex);
-    const selectedPage = state.pages.find((candidate) => candidate.id === select.value);
+    const selectedPage = [...state.pages, ...state.companionAssets].find(
+      (candidate) => candidate.id === select.value,
+    );
     if (selectedPage) setCompositionSlotAssignment(page, slot, selectedPage);
-    else delete page.slotOverrides[slot];
+    else deleteStoredSlotOverride(page, slot, getPresetSlotDefinitions(page)[slot]);
     applyComposition(page);
     renderLayoutEditor(page);
     updatePageControls();
@@ -3024,7 +3682,7 @@ function bindEvents() {
   elements.exportAllButton.addEventListener("click", exportAllPosters);
 
   window.addEventListener("resize", resizePreview);
-  window.addEventListener("beforeunload", releaseAllPages);
+  window.addEventListener("beforeunload", releaseAllAssets);
   window.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && document.body.classList.contains("preview-only")) {
       toggleFocusMode(false);
@@ -3039,6 +3697,7 @@ function initialize() {
   }
   applyProductConfiguration();
   populateFrameSelect();
+  populateCompanionFrameSelect();
   populateLayoutGallery();
   populateThemeOptions();
   applyState();
