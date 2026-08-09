@@ -22,11 +22,12 @@ source and applicable permission.
 
 ## Demo screenshot and preview
 
-`assets/sample-screenshot.png`, `assets/sample-ipad-screenshot.png`, and
-`docs/preview.jpg` are demonstration assets. They may contain application UI,
-device artwork, logos, or other material owned by their respective rights
-holders. They are not licensed under the MIT License unless the relevant rights
-holder states otherwise.
+`assets/sample-screenshot.png`, `assets/sample-ipad-screenshot.png`,
+`docs/preview.jpg`, `docs/preview-cross-device-light.jpg`, and
+`docs/preview-cross-device-midnight.jpg` are demonstration assets. They may
+contain application UI, device artwork, logos, or other material owned by their
+respective rights holders. They are not licensed under the MIT License unless
+the relevant rights holder states otherwise.
 
 Apple, iPhone, iPad, and App Store are trademarks of Apple Inc. This project is not
 affiliated with or endorsed by Apple Inc.

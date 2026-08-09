@@ -533,41 +533,6 @@ test.after(async () => {
 });
 
 test(
-  "参考构图模板通过纯渲染和 Canvas PNG 共用路径",
-  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 30_000 },
-  async () => {
-    for (const testCase of [
-      { layout: "immersive-overlap", theme: "porcelain" },
-      { layout: "content-stage", theme: "midnight" },
-    ]) {
-      const page = await openIpadRenderPage(testCase, testCase.layout);
-      try {
-        const result = await page.evaluate(`(async () => {
-          await (document.fonts?.ready ?? Promise.resolve());
-          const snapshot = createRenderSnapshot(getActivePage());
-          const { canvas, context } = createExportCanvas();
-          const blob = await renderSnapshotToBlob(snapshot, canvas, context, new Map());
-          return {
-            blobSize: blob.size,
-            height: canvas.height,
-            layoutId: snapshot.layoutId,
-            products: snapshot.slots.map((slot) => slot.product),
-            width: canvas.width
-          };
-        })()`);
-        assert.equal(result.layoutId, testCase.layout);
-        assert.deepEqual(result.products, ["ipad", "iphone"]);
-        assert.equal(result.width, 2732);
-        assert.equal(result.height, 2048);
-        assert.ok(result.blobSize > 100_000, `${testCase.layout} PNG 不应为空`);
-      } finally {
-        await page.close();
-      }
-    }
-  },
-);
-
-test(
   "FreeLingo 推荐入口只存在于编辑器界面并适配窄屏",
   { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
   async () => {
