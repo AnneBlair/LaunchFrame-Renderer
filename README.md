@@ -4,7 +4,9 @@
 
 一个零依赖的 App Store 宣传图 HTML 渲染器。它把一组应用截图、Apple 设备机框和可编辑营销文案组合成可预览、可导出 PNG、可自动化截图的 iPhone 或 iPad 画布；每张主截图对应一张独立宣传图，iPad 跨设备模板引用的 iPhone 截图仅作为辅助素材。
 
-![LaunchFrame Renderer preview](docs/preview.jpg)
+![LaunchFrame 浅色 iPad 与 iPhone 效果图](docs/preview-cross-device-light.jpg)
+
+![LaunchFrame 深色 iPad 与 iPhone 效果图](docs/preview-cross-device-midnight.jpg)
 
 ## 当前能力
 
