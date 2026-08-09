@@ -125,6 +125,14 @@
     });
   }
 
+  function typedSlot(product, role, label) {
+    return Object.freeze({ product, role, label });
+  }
+
+  function typedDevice(product, slot, cx, top, width, rotation, z = 1) {
+    return Object.freeze({ type: "device", product, slot, cx, top, width, rotation, z });
+  }
+
   const LAYOUT_PRESETS = Object.freeze({
     classic: Object.freeze({
       id: "classic",
@@ -464,6 +472,93 @@
         ]),
       }),
     }),
+    "ecosystem-hero": Object.freeze({
+      id: "ecosystem-hero",
+      label: "跨设备主视觉",
+      description: "同一体验 · 大小屏延展",
+      category: "ecosystem",
+      badge: "iPad + iPhone",
+      slotCount: 2,
+      slots: Object.freeze([
+        typedSlot("ipad", "primary", "iPad 主屏"),
+        typedSlot("iphone", "support", "iPhone 辅助屏"),
+      ]),
+      copy: ipadCenteredCopy,
+      nodes: Object.freeze([
+        typedDevice("ipad", 0, 1540, 540, 1860, 1, 2),
+        typedDevice("iphone", 1, 455, 720, 470, -4, 4),
+      ]),
+      controls: Object.freeze(["scale", "y", "spread", "tilt", "mirror"]),
+      annotations: null,
+    }),
+    "capture-to-canvas": Object.freeze({
+      id: "capture-to-canvas",
+      label: "随手记录到大屏",
+      description: "快速输入 → 深度处理",
+      category: "ecosystem",
+      badge: "iPad + iPhone",
+      slotCount: 2,
+      slots: Object.freeze([
+        typedSlot("ipad", "primary", "iPad 结果屏"),
+        typedSlot("iphone", "support", "iPhone 输入屏"),
+      ]),
+      copy: ipadCenteredCopy,
+      nodes: Object.freeze([
+        typedDevice("iphone", 1, 450, 700, 500, -3, 2),
+        typedDevice("ipad", 0, 1730, 540, 1700, 1, 3),
+      ]),
+      controls: Object.freeze(["scale", "y", "spread", "tilt", "mirror"]),
+      annotations: Object.freeze({
+        connector: Object.freeze({ type: "arrow", cx: 860, cy: 1160, size: 108 }),
+        labels: Object.freeze([
+          Object.freeze({ slot: 0, cx: 1800, top: 1780, width: 720 }),
+          Object.freeze({ slot: 1, cx: 420, top: 1780, width: 650 }),
+        ]),
+      }),
+    }),
+    "continuity-stack": Object.freeze({
+      id: "continuity-stack",
+      label: "无缝接续",
+      description: "大屏为主 · 手机接续",
+      category: "ecosystem",
+      badge: "iPad + iPhone",
+      slotCount: 2,
+      slots: Object.freeze([
+        typedSlot("ipad", "primary", "iPad 主任务"),
+        typedSlot("iphone", "support", "iPhone 接续任务"),
+      ]),
+      copy: ipadCenteredCopy,
+      nodes: Object.freeze([
+        typedDevice("ipad", 0, 1340, 500, 2050, 0, 2),
+        typedDevice("iphone", 1, 2300, 740, 480, 5, 4),
+      ]),
+      controls: Object.freeze(["scale", "y", "spread", "tilt", "mirror"]),
+      annotations: null,
+    }),
+    "companion-mode": Object.freeze({
+      id: "companion-mode",
+      label: "双端协同",
+      description: "主工作台 + 辅助端",
+      category: "ecosystem",
+      badge: "iPad + iPhone",
+      slotCount: 2,
+      slots: Object.freeze([
+        typedSlot("ipad", "primary", "iPad 工作台"),
+        typedSlot("iphone", "support", "iPhone 辅助端"),
+      ]),
+      copy: ipadCenteredCopy,
+      nodes: Object.freeze([
+        typedDevice("ipad", 0, 1120, 600, 1680, -1, 2),
+        typedDevice("iphone", 1, 2280, 680, 500, 3, 3),
+      ]),
+      controls: Object.freeze(["scale", "y", "spread", "tilt", "mirror"]),
+      annotations: Object.freeze({
+        labels: Object.freeze([
+          Object.freeze({ slot: 0, cx: 1040, top: 1800, width: 760 }),
+          Object.freeze({ slot: 1, cx: 2280, top: 1780, width: 650 }),
+        ]),
+      }),
+    }),
   });
 
   function clamp(value, min, max, fallback) {
@@ -572,6 +667,52 @@
     return resolved;
   }
 
+  function resolveTypedSlots({
+    pools,
+    activeProduct,
+    activeItemId,
+    slotOverrides = {},
+    slots = [],
+  }) {
+    const activePool = pools?.[activeProduct] ?? [];
+    const activeIndex = activePool.findIndex((item) => item.id === activeItemId);
+    const activeItem = activePool[activeIndex] ?? null;
+    const resolved = [];
+    const usedIds = new Set();
+
+    slots.forEach((slot, index) => {
+      const pool = pools?.[slot.product] ?? [];
+      if (slot.product === activeProduct && slot.role === "primary" && activeItem?.screenshot) {
+        resolved.push(activeItem);
+        usedIds.add(activeItem.id);
+        return;
+      }
+
+      const overrideId = slotOverrides[index];
+      const overrideItem = pool.find(
+        (item) => item.id === overrideId && item.screenshot && !usedIds.has(item.id),
+      );
+      if (overrideItem) {
+        resolved.push(overrideItem);
+        usedIds.add(overrideItem.id);
+        return;
+      }
+
+      const startIndex = slot.product === activeProduct && activeIndex >= 0 ? activeIndex + 1 : 0;
+      let automaticItem = null;
+      for (let offset = 0; offset < pool.length; offset += 1) {
+        const candidate = pool[(startIndex + offset) % pool.length];
+        if (!candidate?.screenshot || usedIds.has(candidate.id)) continue;
+        automaticItem = candidate;
+        break;
+      }
+      resolved.push(automaticItem);
+      if (automaticItem) usedIds.add(automaticItem.id);
+    });
+
+    return resolved;
+  }
+
   function transformHorizontal(value, spread, center = ARTBOARD.width / 2) {
     return center + (value - center) * spread;
   }
@@ -644,7 +785,8 @@
     for (let slot = 0; slot < slotCount; slot += 1) {
       const page = slots[slot];
       if (!page?.screenshot) errors.push(`第 ${slot + 1} 个截图槽位为空`);
-      if (page?.imageState === "error") errors.push(`第 ${slot + 1} 个截图无法读取`);
+      if (page?.validationError) errors.push(page.validationError);
+      else if (page?.imageState === "error") errors.push(`第 ${slot + 1} 个截图无法读取`);
     }
     if (annotationOverflow) errors.push("步骤标签过长，请缩短后再导出");
     return { valid: errors.length === 0, errors };
@@ -833,6 +975,7 @@
       normalizeTuning: normalizeProductTuning,
       createDefaultLayoutState: createDefaultProductLayoutState,
       resolveSlotPages,
+      resolveTypedSlots,
       resolveComposition: resolveProductComposition,
       validateComposition,
       getBackgroundCss: getProductBackgroundCss,
@@ -860,6 +1003,7 @@
     normalizeTuning,
     createDefaultLayoutState,
     resolveSlotPages,
+    resolveTypedSlots,
     resolveComposition,
     validateComposition,
     getBackgroundCss,

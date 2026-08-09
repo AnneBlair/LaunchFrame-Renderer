@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>LaunchFrame · iPad App Store 宣传图</title>
-    <link rel="stylesheet" href="./styles.css?v=20260808-ipad-layouts" />
+    <link rel="stylesheet" href="./styles.css?v=20260809-cross-device" />
   </head>
   <body data-product="ipad">
     <div class="workspace">
@@ -111,6 +111,35 @@
             <p id="slotAssignmentHint" class="layout-hint"></p>
           </div>
 
+          <div id="companionAssetPanel" class="layout-subsection companion-asset-panel" hidden>
+            <div class="companion-panel-heading">
+              <span class="layout-subsection-label">关联 iPhone 截图</span>
+              <span class="device-role-badge">辅助素材 · 不单独导出</span>
+            </div>
+            <input
+              id="iphoneScreenshotInput"
+              class="visually-hidden"
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/webp"
+            />
+            <label id="iphoneScreenshotAddButton" class="upload-button companion-upload-button" for="iphoneScreenshotInput">
+              ＋ 添加竖版 iPhone 截图
+            </label>
+            <div id="iphoneAssetList" class="companion-asset-list" role="radiogroup" aria-label="iPhone 辅助截图"></div>
+            <label class="field companion-fit-field" for="iphoneFitSelect">
+              <span>当前辅助截图填充方式</span>
+              <select id="iphoneFitSelect">
+                <option value="cover">铺满屏幕（可能裁剪）</option>
+                <option value="contain">完整显示（可能留边）</option>
+              </select>
+            </label>
+            <button id="deleteIphoneAsset" class="danger-button companion-delete-button" type="button">
+              移除当前辅助截图
+            </button>
+            <p id="iphoneScreenshotStatus" class="layout-hint" role="status" aria-live="polite"></p>
+          </div>
+
           <div id="annotationPanel" class="layout-subsection" hidden>
             <label class="toggle-field" for="annotationsToggle">
               <span>显示步骤标注</span>
@@ -139,6 +168,12 @@
             <select id="frameSelect"></select>
           </label>
           <p class="layout-hint">默认使用 13″ 银色机框；需要时仍可切换 11″ 或深空黑色。</p>
+
+          <label id="iphoneFrameField" class="field companion-frame-field" for="iphoneFrameSelect" hidden>
+            <span>iPhone 辅助机框</span>
+            <select id="iphoneFrameSelect"></select>
+            <small>跨设备模板默认使用 Air 云白色机框。</small>
+          </label>
         </section>
 
         <section class="control-section" aria-labelledby="layout-heading">
@@ -277,7 +312,7 @@
       <p id="exportMeasureSubtitle"></p>
     </div>
 
-    <script src="./layouts.js?v=20260808-ipad-layouts"></script>
-    <script src="./app.js?v=20260808-ipad-layouts"></script>
+    <script src="./layouts.js?v=20260809-cross-device"></script>
+    <script src="./app.js?v=20260809-cross-device"></script>
   </body>
 </html>
