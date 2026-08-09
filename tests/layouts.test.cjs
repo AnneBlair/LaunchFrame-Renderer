@@ -129,7 +129,7 @@ test("validation reports missing, failed, and overflowing content", () => {
 
 test("registers iPad single-device and cross-device guarded layouts", () => {
   assert.deepEqual(ipadLayouts.ARTBOARD, { width: 2732, height: 2048 });
-  assert.equal(Object.keys(ipadLayouts.LAYOUT_PRESETS).length, 12);
+  assert.equal(Object.keys(ipadLayouts.LAYOUT_PRESETS).length, 14);
   assert.equal(Object.keys(ipadLayouts.THEMES).length, 4);
 
   for (const preset of Object.values(ipadLayouts.LAYOUT_PRESETS)) {
@@ -141,6 +141,8 @@ test("registers iPad single-device and cross-device guarded layouts", () => {
 
 test("iPad cross-device presets declare typed iPad and iPhone slots", () => {
   const crossDeviceIds = [
+    "immersive-overlap",
+    "content-stage",
     "ecosystem-hero",
     "capture-to-canvas",
     "continuity-stack",
@@ -162,6 +164,29 @@ test("iPad cross-device presets declare typed iPad and iPhone slots", () => {
       new Set(["ipad", "iphone"]),
     );
   }
+});
+
+test("reference-led iPad layouts preserve overlap and separated-stage hierarchy", () => {
+  assert.equal(ipadLayouts.normalizeLayoutId("immersive-overlap"), "immersive-overlap");
+  assert.equal(ipadLayouts.normalizeLayoutId("content-stage"), "content-stage");
+
+  const overlap = ipadLayouts.resolveComposition({ layoutId: "immersive-overlap" });
+  const overlapIpad = overlap.nodes.find((node) => node.product === "ipad");
+  const overlapIphone = overlap.nodes.find((node) => node.product === "iphone");
+  assert.ok(overlapIpad.width >= 2200);
+  assert.ok(overlapIphone.cx < overlapIpad.cx);
+  assert.ok(overlapIphone.z > overlapIpad.z);
+  assert.ok(
+    overlapIphone.cx + overlapIphone.width / 2 > overlapIpad.cx - overlapIpad.width / 2,
+  );
+
+  const stage = ipadLayouts.resolveComposition({ layoutId: "content-stage" });
+  const stageIpad = stage.nodes.find((node) => node.product === "ipad");
+  const stageIphone = stage.nodes.find((node) => node.product === "iphone");
+  assert.ok(stageIpad.width >= 1800);
+  assert.ok(stageIpad.cx < stageIphone.cx);
+  assert.ok(stageIphone.z > stageIpad.z);
+  assert.ok(stageIphone.top > stageIpad.top);
 });
 
 test("typed slots keep companion assets outside the iPad output pool", () => {

@@ -400,6 +400,75 @@ async function openEditorPage(pathname, label) {
   return page;
 }
 
+async function openRenderPage(
+  { height, parameters, pathname, screenshot, width },
+  label,
+) {
+  const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
+  const { sessionId } = await cdp.send("Target.attachToTarget", {
+    flatten: true,
+    targetId,
+  });
+  const page = new BrowserPage(cdp, targetId, sessionId);
+  await cdp.send("Runtime.enable", {}, sessionId);
+  await cdp.send("Page.enable", {}, sessionId);
+  await cdp.send(
+    "Emulation.setDeviceMetricsOverride",
+    { deviceScaleFactor: 1, height, mobile: false, width },
+    sessionId,
+  );
+  const query = new URLSearchParams({
+    render: "1",
+    screenshot,
+    ...parameters,
+  });
+  await cdp.send(
+    "Page.navigate",
+    { url: `${staticServerUrl}/${pathname}?${query.toString()}` },
+    sessionId,
+  );
+  await page.waitFor(
+    `document.body.dataset.renderState === "ready" || document.body.dataset.renderState === "error"`,
+    `加载 ${label} 纯渲染页`,
+    12_000,
+  );
+  assert.equal(
+    await page.evaluate(`document.body.dataset.renderState`),
+    "ready",
+    `${label} 纯渲染页应进入 ready`,
+  );
+  return page;
+}
+
+function openIpadRenderPage(parameters, label) {
+  return openRenderPage(
+    {
+      height: 2048,
+      parameters: {
+        iphoneScreenshot: "./assets/sample-screenshot.png",
+        ...parameters,
+      },
+      pathname: "ipad.html",
+      screenshot: "./assets/sample-ipad-screenshot.png",
+      width: 2732,
+    },
+    label,
+  );
+}
+
+function openIphoneRenderPage(parameters, label) {
+  return openRenderPage(
+    {
+      height: 2868,
+      parameters,
+      pathname: "index.html",
+      screenshot: "./assets/sample-screenshot.png",
+      width: 1320,
+    },
+    label,
+  );
+}
+
 async function withIpadPage(run) {
   const page = await openEditorPage("ipad.html", "iPad");
   try {
@@ -462,6 +531,128 @@ test.after(async () => {
     }
   }
 });
+
+test(
+  "参考构图模板通过纯渲染和 Canvas PNG 共用路径",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 30_000 },
+  async () => {
+    for (const testCase of [
+      { layout: "immersive-overlap", theme: "porcelain" },
+      { layout: "content-stage", theme: "midnight" },
+    ]) {
+      const page = await openIpadRenderPage(testCase, testCase.layout);
+      try {
+        const result = await page.evaluate(`(async () => {
+          await (document.fonts?.ready ?? Promise.resolve());
+          const snapshot = createRenderSnapshot(getActivePage());
+          const { canvas, context } = createExportCanvas();
+          const blob = await renderSnapshotToBlob(snapshot, canvas, context, new Map());
+          return {
+            blobSize: blob.size,
+            height: canvas.height,
+            layoutId: snapshot.layoutId,
+            products: snapshot.slots.map((slot) => slot.product),
+            width: canvas.width
+          };
+        })()`);
+        assert.equal(result.layoutId, testCase.layout);
+        assert.deepEqual(result.products, ["ipad", "iphone"]);
+        assert.equal(result.width, 2732);
+        assert.equal(result.height, 2048);
+        assert.ok(result.blobSize > 100_000, `${testCase.layout} PNG 不应为空`);
+      } finally {
+        await page.close();
+      }
+    }
+  },
+);
+
+test(
+  "FreeLingo 推荐入口只存在于编辑器界面并适配窄屏",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
+  async () => {
+    for (const productCase of [
+      {
+        label: "iPhone",
+        openEditor: withIphonePage,
+        openRender: openIphoneRenderPage,
+      },
+      {
+        label: "iPad",
+        openEditor: withIpadPage,
+        openRender: openIpadRenderPage,
+      },
+    ]) {
+      await productCase.openEditor(async (page) => {
+        await page.client.send(
+          "Emulation.setDeviceMetricsOverride",
+          { deviceScaleFactor: 1, height: 900, mobile: false, width: 800 },
+          page.sessionId,
+        );
+        await delay(50);
+        const editorState = await page.evaluate(`(() => {
+          const controls = document.querySelector(".controls");
+          const promo = document.querySelector(".app-promo");
+          const controlsRect = controls?.getBoundingClientRect();
+          const promoRect = promo?.getBoundingClientRect();
+          return {
+            artboardContainsPromo: document.querySelector("#artboard")?.contains(promo) ?? true,
+            controlsContainPromo: controls?.contains(promo) ?? false,
+            href: promo?.href ?? null,
+            relTokens: promo ? [...promo.relList] : [],
+            snapshotContainsPromo: JSON.stringify(createRenderSnapshot(getActivePage())).includes("freelingo.ai"),
+            target: promo?.target ?? null,
+            visibleInViewport: Boolean(
+              promoRect?.width && promoRect?.height &&
+              promoRect.top >= 0 && promoRect.bottom <= innerHeight
+            ),
+            withinSidebar: Boolean(
+              controlsRect && promoRect &&
+              promoRect.left >= controlsRect.left && promoRect.right <= controlsRect.right
+            )
+          };
+        })()`);
+        assert.equal(editorState.artboardContainsPromo, false);
+        assert.equal(editorState.controlsContainPromo, true);
+        assert.equal(editorState.href, "https://freelingo.ai/");
+        assert.ok(editorState.relTokens.includes("noopener"));
+        assert.ok(editorState.relTokens.includes("noreferrer"));
+        assert.equal(editorState.snapshotContainsPromo, false);
+        assert.equal(editorState.target, "_blank");
+        assert.equal(editorState.visibleInViewport, true);
+        assert.equal(editorState.withinSidebar, true);
+
+        await page.enterPreviewOnly();
+        assert.equal(
+          await page.evaluate(`document.querySelector(".app-promo")?.getClientRects().length`),
+          0,
+        );
+      });
+
+      const renderPage = await productCase.openRender({}, `${productCase.label} FreeLingo 推荐隔离`);
+      try {
+        assert.equal(
+          await renderPage.evaluate(`document.querySelector(".app-promo")?.getClientRects().length`),
+          0,
+        );
+        assert.equal(
+          await renderPage.evaluate(
+            `document.querySelector("#artboard")?.querySelector(".app-promo") === null`,
+          ),
+          true,
+        );
+        assert.equal(
+          await renderPage.evaluate(
+            `JSON.stringify(createRenderSnapshot(getActivePage())).includes("freelingo.ai")`,
+          ),
+          false,
+        );
+      } finally {
+        await renderPage.close();
+      }
+    }
+  },
+);
 
 test(
   "classic 的原机框是真实外部文件拖放目标",
