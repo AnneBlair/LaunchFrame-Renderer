@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <title>LaunchFrame · App Store 宣传图预览</title>
-    <link rel="stylesheet" href="./styles.css?v=20260809-cross-device" />
+    <link rel="stylesheet" href="./styles.css?v=20260809-dragdrop-fix" />
   </head>
   <body data-product="iphone">
     <div class="workspace">
@@ -260,6 +260,8 @@
               </div>
               <img id="frameImage" class="frame-image" alt="" />
             </div>
+
+            <div id="dropStatus" class="drop-status" role="status" aria-live="polite" hidden></div>
           </article>
         </div>
       </main>
@@ -271,6 +273,7 @@
     </div>
 
     <script src="./layouts.js?v=20260809-cross-device"></script>
-    <script src="./app.js?v=20260809-cross-device"></script>
+    <script src="./dragdrop.js?v=20260809-dragdrop-fix"></script>
+    <script src="./app.js?v=20260809-dragdrop-fix"></script>
   </body>
 </html>

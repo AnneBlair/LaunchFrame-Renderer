@@ -226,6 +226,7 @@ const LAYOUT_ENGINE = layoutRegistry?.forProduct
   : productKey === "iphone"
     ? layoutRegistry
     : null;
+const DRAG_DROP = window.LaunchFrameDragDrop ?? null;
 
 function createFrames(config) {
   return config.frameGroups.flatMap((group) =>
@@ -280,6 +281,7 @@ const elements = {
   screenshotImage: document.querySelector("#screenshotImage"),
   screenshotName: document.querySelector("#screenshotName"),
   screenshotStatus: document.querySelector("#screenshotStatus"),
+  dropStatus: document.querySelector("#dropStatus"),
   pagePosition: document.querySelector("#pagePosition"),
   moveScreenshotPrevious: document.querySelector("#moveScreenshotPrevious"),
   moveScreenshotNext: document.querySelector("#moveScreenshotNext"),
@@ -403,6 +405,7 @@ let nextCompanionAssetId = 1;
 let isImporting = false;
 let isExporting = false;
 let compositionPointerDrag = null;
+let dropStatusTimer = null;
 
 function createPage({
   title,
@@ -663,6 +666,31 @@ function releaseAllAssets() {
 function setScreenshotStatus(message, isError = false) {
   elements.screenshotStatus.textContent = message;
   elements.screenshotStatus.classList.toggle("is-error", isError);
+}
+
+function showCanvasDropStatus(message, isError = false) {
+  if (!elements.dropStatus) return;
+  if (dropStatusTimer) {
+    window.clearTimeout(dropStatusTimer);
+    dropStatusTimer = null;
+  }
+  elements.dropStatus.textContent = message;
+  elements.dropStatus.classList.toggle("is-error", isError);
+  elements.dropStatus.hidden = !message;
+  if (!message) return;
+  dropStatusTimer = window.setTimeout(() => {
+    elements.dropStatus.hidden = true;
+    dropStatusTimer = null;
+  }, 3600);
+}
+
+function setDropFeedback(message, isError = false, targetProduct = productKey) {
+  if (targetProduct !== productKey && elements.iphoneScreenshotStatus) {
+    setCompanionScreenshotStatus(message, isError);
+  } else {
+    setScreenshotStatus(message, isError);
+  }
+  showCanvasDropStatus(message, isError);
 }
 
 function populateFrameSelect() {
@@ -1104,7 +1132,10 @@ function createCardNode(node, slotPage) {
 
 function createDetailNode(node, slotPage) {
   const wrapper = document.createElement("div");
-  wrapper.className = "composition-detail";
+  wrapper.className = "composition-detail composition-drop-proxy";
+  wrapper.dataset.slotIndex = String(node.slot);
+  wrapper.dataset.product = node.product ?? productKey;
+  wrapper.title = "细节窗使用主截图；可将图片拖入此处替换主截图";
   wrapper.style.left = `${node.cx}px`;
   wrapper.style.top = `${node.top}px`;
   wrapper.style.width = `${node.width}px`;
@@ -2802,7 +2833,7 @@ function isSupportedImageFile(file) {
   return ALLOWED_IMAGE_TYPES.has(file.type) || /\.(?:png|jpe?g|webp)$/i.test(file.name);
 }
 
-async function createUploadedPage(file, templatePage) {
+async function createUploadedPage(file, templatePage, { inheritLayout = false } = {}) {
   const objectUrl = URL.createObjectURL(file);
 
   try {
@@ -2817,6 +2848,14 @@ async function createUploadedPage(file, templatePage) {
       imageHeight: image.naturalHeight,
       objectUrl,
       imageState: "ready",
+      ...(inheritLayout
+        ? {
+            layoutId: templatePage.layoutId,
+            layoutTuning: templatePage.layoutTuning,
+            companionAssetId: templatePage.companionAssetId,
+            annotations: templatePage.annotations,
+          }
+        : {}),
     });
   } catch (error) {
     URL.revokeObjectURL(objectUrl);
@@ -2992,6 +3031,16 @@ function setCompositionSlotAssignment(page, slotIndex, slotPage) {
   page.slotOverrides[slotIndex] = slotPage.id;
 }
 
+function isFixedPrimaryDropSlot(page, slotIndex) {
+  const preset = getLayoutPreset(page);
+  const definition = getPresetSlotDefinitions(page)[slotIndex];
+  return (
+    definition?.product === productKey &&
+    definition.role === "primary" &&
+    (preset.slotCount === 1 || Boolean(preset.slots))
+  );
+}
+
 function swapCompositionSlots(sourceSlot, targetSlot) {
   if (isImporting || isExporting || sourceSlot === targetSlot) return;
 
@@ -3031,73 +3080,138 @@ function swapCompositionSlots(sourceSlot, targetSlot) {
 }
 
 async function fillCompositionSlotFromFiles(fileList, targetSlot) {
-  const files = Array.from(fileList);
-  if (isImporting || isExporting || files.length === 0) return;
+  const files = Array.from(fileList ?? []);
+  const page = getActivePage();
+  const preset = getLayoutPreset(page);
+  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= preset.slotCount) return;
+  const targetProduct = getPresetSlotDefinitions(page)[targetSlot].product;
+  const isCompanionTarget = targetProduct !== productKey;
+  if (isImporting || isExporting) {
+    setDropFeedback("当前任务尚未完成，请稍后再拖入图片。", true, targetProduct);
+    return;
+  }
+  if (files.length === 0) {
+    setDropFeedback("没有读取到图片文件；请从 Finder 拖入 PNG、JPEG 或 WebP。", true, targetProduct);
+    return;
+  }
   if (files.length !== 1) {
-    setScreenshotStatus("一次请只拖入 1 张图片。", true);
+    setDropFeedback("一次请只拖入 1 张图片。", true, targetProduct);
     return;
   }
 
   const file = files[0];
   if (!isSupportedImageFile(file)) {
-    setScreenshotStatus(`未填入：${file.name} 不是支持的图片格式。`, true);
+    setDropFeedback(`未填入：${file.name} 不是支持的图片格式。`, true, targetProduct);
     return;
   }
 
-  const page = getActivePage();
-  const preset = getLayoutPreset(page);
-  if (!Number.isInteger(targetSlot) || targetSlot < 0 || targetSlot >= preset.slotCount) return;
-  const targetProduct = getPresetSlotDefinitions(page)[targetSlot].product;
   const targetPool = targetProduct === productKey ? getOutputPages() : state.companionAssets;
   if (targetPool.length >= MAX_SCREENSHOTS) {
-    setScreenshotStatus(
-      `未填入：${targetProduct === "iphone" ? "iPhone 辅助素材" : "截图组"}最多 ${MAX_SCREENSHOTS} 张。`,
+    setDropFeedback(
+      `未填入：${isCompanionTarget ? "iPhone 辅助素材" : "截图组"}最多 ${MAX_SCREENSHOTS} 张。`,
       true,
+      targetProduct,
     );
     return;
   }
 
   isImporting = true;
-  setScreenshotStatus(`正在将 ${file.name} 填入图 ${targetSlot + 1}…`);
+  setDropFeedback(`正在将 ${file.name} 填入图 ${targetSlot + 1}…`, false, targetProduct);
   renderScreenshotList();
   updatePageControls();
 
   let importedPage = null;
+  const shouldActivateImportedPage = isFixedPrimaryDropSlot(page, targetSlot);
   try {
     importedPage =
-      targetProduct === "iphone"
+      isCompanionTarget
         ? await createUploadedCompanionAsset(file)
-        : await createUploadedPage(file, { ...page });
-    if (targetProduct === "iphone") state.companionAssets.push(importedPage);
+        : await createUploadedPage(file, page, { inheritLayout: shouldActivateImportedPage });
+    if (isCompanionTarget) state.companionAssets.push(importedPage);
     else state.pages.push(importedPage);
-    setCompositionSlotAssignment(page, targetSlot, importedPage);
+    if (shouldActivateImportedPage) state.activePageId = importedPage.id;
+    else setCompositionSlotAssignment(page, targetSlot, importedPage);
   } catch (error) {
-    setScreenshotStatus(`未填入：${error.message}`, true);
+    setDropFeedback(`未填入：${error.message}`, true, targetProduct);
   } finally {
     isImporting = false;
   }
 
   if (importedPage) {
-    applyComposition(page);
-    renderLayoutEditor(page);
-    setScreenshotStatus(
-      targetProduct === "iphone"
-        ? `已将 ${file.name} 填入 iPhone 辅助槽位，不会加入导出顺序。`
-        : `已将 ${file.name} 填入图 ${targetSlot + 1}，并添加到截图组。`,
-    );
+    if (shouldActivateImportedPage) applyState();
+    else {
+      applyComposition(page);
+      renderLayoutEditor(page);
+    }
+    let successMessage = `已将 ${file.name} 填入图 ${targetSlot + 1}，并添加到截图组。`;
+    if (shouldActivateImportedPage) successMessage = `已将 ${file.name} 新增为当前宣传图。`;
+    else if (isCompanionTarget) {
+      successMessage = `已将 ${file.name} 填入 iPhone 辅助槽位，不会加入导出顺序。`;
+    }
+    setDropFeedback(successMessage, false, targetProduct);
     setExportStatus("");
   }
   renderScreenshotList();
   updatePageControls();
 }
 
-function dataTransferHasFiles(dataTransfer) {
-  return Array.from(dataTransfer?.types ?? []).includes("Files");
+function dataTransferHasDropPayload(dataTransfer) {
+  if (DRAG_DROP) return DRAG_DROP.hasSupportedPayload(dataTransfer);
+  return (
+    Array.from(dataTransfer?.files ?? []).length > 0 ||
+    Array.from(dataTransfer?.types ?? []).some(
+      (type) => String(type).toLowerCase() === "files",
+    )
+  );
+}
+
+function parseDropPayload(dataTransfer) {
+  if (DRAG_DROP) return DRAG_DROP.describePayload(dataTransfer);
+  const files = Array.from(dataTransfer?.files ?? []);
+  return {
+    kind: files.length > 0 ? "file" : "empty",
+    files,
+    urls: [],
+    types: Array.from(dataTransfer?.types ?? []),
+  };
+}
+
+function getCompositionDropTarget(target) {
+  if (!(target instanceof Element)) return null;
+  const directTarget = target.closest(
+    ".composition-slot[data-slot-index], .composition-drop-proxy[data-slot-index]",
+  );
+  if (directTarget && elements.artboard.contains(directTarget)) {
+    const slotIndex = Number(directTarget.dataset.slotIndex);
+    const highlightElement = directTarget.classList.contains("composition-drop-proxy")
+      ? (elements.compositionLayer?.querySelector(
+          `.composition-slot[data-slot-index="${slotIndex}"]`,
+        ) ?? directTarget)
+      : directTarget;
+    return {
+      element: highlightElement,
+      slotIndex,
+    };
+  }
+
+  const preset = getLayoutPreset();
+  if (preset.slotCount !== 1) return null;
+  const primaryElement =
+    elements.compositionLayer?.querySelector('.composition-slot[data-slot-index="0"]') ??
+    elements.device;
+  return { element: primaryElement, slotIndex: 0 };
+}
+
+function getDropTargetProduct(target) {
+  const definition = getPresetSlotDefinitions()[target?.slotIndex];
+  return definition?.product ?? productKey;
 }
 
 function clearCompositionDropTargets() {
-  elements.compositionLayer
-    ?.querySelectorAll(".composition-slot.is-drop-target")
+  elements.artboard
+    ?.querySelectorAll(
+      ".composition-slot.is-drop-target, .composition-drop-proxy.is-drop-target, #device.is-drop-target",
+    )
     .forEach((slot) => slot.classList.remove("is-drop-target"));
 }
 
@@ -3133,6 +3247,7 @@ function resetState() {
   elements.screenshotInput.value = "";
   setExportStatus("");
   setScreenshotStatus("");
+  showCanvasDropStatus("");
   applyState();
 }
 
@@ -3278,6 +3393,7 @@ function bindEvents() {
     const slot = event.target.closest(".composition-slot[data-slot-index]");
     if (
       !slot ||
+      document.body.classList.contains("preview-only") ||
       isImporting ||
       isExporting ||
       event.button !== 0 ||
@@ -3343,35 +3459,31 @@ function bindEvents() {
     finishCompositionPointerDrag(event, false);
   });
 
-  elements.compositionLayer?.addEventListener("dragover", (event) => {
-    const slot = event.target.closest(".composition-slot[data-slot-index]");
-    if (!slot || isImporting || isExporting || !dataTransferHasFiles(event.dataTransfer)) return;
-
-    event.preventDefault();
-    clearCompositionDropTargets();
-    slot.classList.add("is-drop-target");
-    event.dataTransfer.dropEffect = "copy";
-  });
-
-  elements.compositionLayer?.addEventListener("drop", (event) => {
-    const slot = event.target.closest(".composition-slot[data-slot-index]");
-    if (!slot || isImporting || isExporting) return;
-
-    event.preventDefault();
-    event.stopPropagation();
-    const targetSlot = Number(slot.dataset.slotIndex);
-    const files = Array.from(event.dataTransfer?.files ?? []);
-    clearCompositionDragState();
-
-    if (files.length > 0 || dataTransferHasFiles(event.dataTransfer)) {
-      void fillCompositionSlotFromFiles(files, targetSlot);
-    }
-  });
-
   elements.artboard.addEventListener("dragover", (event) => {
-    if (!LAYOUT_ENGINE || !dataTransferHasFiles(event.dataTransfer)) return;
+    if (!LAYOUT_ENGINE || !dataTransferHasDropPayload(event.dataTransfer)) return;
     event.preventDefault();
-    if (!event.target.closest(".composition-slot")) clearCompositionDropTargets();
+    if (isRenderMode) {
+      event.dataTransfer.dropEffect = "none";
+      clearCompositionDropTargets();
+      return;
+    }
+    if (isImporting || isExporting) {
+      event.dataTransfer.dropEffect = "none";
+      clearCompositionDropTargets();
+      showCanvasDropStatus("当前任务尚未完成，请稍后再拖入图片。", true);
+      return;
+    }
+
+    const target = getCompositionDropTarget(event.target);
+    clearCompositionDropTargets();
+    if (!target) {
+      event.dataTransfer.dropEffect = "none";
+      showCanvasDropStatus("请将图片拖到目标真机边框内。", true);
+      return;
+    }
+    showCanvasDropStatus("");
+    target.element.classList.add("is-drop-target");
+    event.dataTransfer.dropEffect = "copy";
   });
 
   elements.artboard.addEventListener("dragleave", (event) => {
@@ -3382,22 +3494,70 @@ function bindEvents() {
   });
 
   elements.artboard.addEventListener("drop", (event) => {
-    if (
-      !LAYOUT_ENGINE ||
-      !dataTransferHasFiles(event.dataTransfer) ||
-      event.target.closest(".composition-slot")
-    ) {
-      return;
-    }
+    if (!LAYOUT_ENGINE || !dataTransferHasDropPayload(event.dataTransfer)) return;
     event.preventDefault();
     clearCompositionDragState();
+    if (isRenderMode) return;
+
+    const target = getCompositionDropTarget(event.target);
+    const targetProduct = getDropTargetProduct(target);
+    if (isImporting || isExporting) {
+      setDropFeedback("当前任务尚未完成，请稍后再拖入图片。", true, targetProduct);
+      return;
+    }
+
     const preset = getLayoutPreset();
-    setScreenshotStatus(
-      preset?.slotCount > 1
-        ? "请将图片拖到目标真机边框内。"
-        : "请先选择多图排版，再将图片拖到目标真机边框内。",
-      true,
-    );
+    if (!target) {
+      setDropFeedback(
+        preset.slotCount > 1 ? "请将图片拖到目标真机边框内。" : "请将图片拖到画布内。",
+        true,
+      );
+      return;
+    }
+
+    const payload = parseDropPayload(event.dataTransfer);
+    if (payload.kind === "file") {
+      void fillCompositionSlotFromFiles(payload.files, target.slotIndex);
+      return;
+    }
+    if (payload.kind === "url") {
+      setDropFeedback(
+        "检测到网页图片链接；请先保存到本地，再拖入 PNG、JPEG 或 WebP 文件。",
+        true,
+        targetProduct,
+      );
+      return;
+    }
+    if (
+      payload.types.some((type) =>
+        ["files", "application/x-moz-file"].includes(String(type).toLowerCase()),
+      )
+    ) {
+      setDropFeedback(
+        "图片来源没有提供可读取的文件；请先保存到 Finder 后再拖入。",
+        true,
+        targetProduct,
+      );
+      return;
+    }
+    setDropFeedback("没有读取到可用图片；请拖入 PNG、JPEG 或 WebP 文件。", true, targetProduct);
+  });
+
+  window.addEventListener("dragover", (event) => {
+    if (!dataTransferHasDropPayload(event.dataTransfer)) return;
+    if (event.target instanceof Node && elements.artboard.contains(event.target)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "none";
+    if (!isRenderMode) showCanvasDropStatus("请将图片拖到宣传图画布内。", true);
+  });
+
+  window.addEventListener("drop", (event) => {
+    if (!dataTransferHasDropPayload(event.dataTransfer)) return;
+    if (event.target instanceof Node && elements.artboard.contains(event.target)) return;
+    event.preventDefault();
+    clearCompositionDragState();
+    if (isRenderMode) return;
+    setDropFeedback("请将图片拖到宣传图画布内。", true);
   });
 
   elements.moveScreenshotPrevious.addEventListener("click", () => moveActivePage(-1));

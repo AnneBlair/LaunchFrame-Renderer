@@ -16,7 +16,7 @@ LaunchFrame Renderer is a zero-dependency HTML tool for creating App Store promo
 - Keep portrait iPhone companion screenshots in a dedicated iPad-side asset pool that never enters the poster order or exports independently
 - Share one primary frame and one of four curated themes—Porcelain, Midnight, Aurora, or Electric—across each product set; iPad cross-device layouts also share one companion iPhone frame
 - Automatically fill up to three screenshot slots from the poster order, with stable manual overrides
-- Drag screenshots directly between multi-screen frames to swap them, or drop a local image into a target frame
+- Drop a local image anywhere on a single-screen poster or into a specific multi-screen frame, including in Focus Preview; multi-screen slots can also be dragged to swap them
 - Safely tune scale, vertical offset, spread, and tilt; mirror supported iPad compositions; and add optional one-line step annotations
 - Choose from 15 portrait frames for iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max, and iPhone Air
 - Choose from four landscape Space Black or Silver frames for the 11-inch and 13-inch iPad Pro (M5)
@@ -61,11 +61,11 @@ After capturing screenshots from Xcode or Simulator, select one or more local im
 
 Click a thumbnail to edit that poster. The headline, supporting copy, screenshot fit mode, and layout are stored independently for each poster. The primary frame, optional companion frame, and theme are each shared by the entire product set.
 
-For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override slots manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. You can also drag one preview image onto another to swap them, or drop a local image into a target frame; the local image is added to the screenshot set and assigned to that slot immediately. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
+For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override slots manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. You can also drag one preview image onto another to swap them. Drop a local image anywhere on a single-screen poster to display it immediately and add it to the screenshot set, or into a specific frame in a multi-screen layout to fill that slot. Finder files and image files exposed by external apps are accepted; URL-only web images receive a visible save-to-disk prompt instead of failing silently. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
 
 The iPad editor groups four additional layouts under **Cross-device collaboration**. They keep the current iPad poster as the primary screen and require one portrait iPhone companion screenshot. Companion assets can be imported, selected, fitted, and removed independently; stable asset IDs preserve page-level assignments, and a deleted reference falls back to the next available asset. The default companion frame is iPhone Air in Cloud White. Use these layouts only for real implemented behavior—do not imply sync, continuity, or live collaboration unless the app actually provides it.
 
-The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls. iPhone Focus Lens and iPad Detail Callout also expose horizontal and vertical focus controls, and supported iPad layouts can be mirrored. Newly imported screenshots still start with Classic; the renderer never assigns a new layout automatically.
+The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls. iPhone Focus Lens and iPad Detail Callout also expose horizontal and vertical focus controls, and supported iPad layouts can be mirrored. Screenshots imported through the editor controls still start with Classic; dropping onto a single-screen canvas or a cross-device primary frame keeps the current composition.
 
 The iPad editor defaults to the 13-inch Silver frame and **Stretch to fit** so the screenshot is neither cropped nor letterboxed. A slight aspect-ratio adjustment may occur when the screenshot and frame do not match exactly; other frames, **Cover**, and **Contain** remain available.
 
@@ -137,6 +137,7 @@ Capture the page with the viewport that matches the selected renderer—`1320 ×
 ├── ipad.html
 ├── styles.css
 ├── layouts.js
+├── dragdrop.js
 ├── app.js
 ├── README.md
 ├── README_EN.md
@@ -150,7 +151,9 @@ Capture the page with the viewport that matches the selected renderer—`1320 ×
 ├── docs/
 │   └── preview.jpg
 └── tests/
-    └── layouts.test.cjs
+    ├── layouts.test.cjs
+    ├── dragdrop.test.cjs
+    └── drag-drop.browser.test.mjs
 ```
 
 ## Roadmap
