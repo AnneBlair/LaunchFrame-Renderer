@@ -15,10 +15,10 @@ Before using or redistributing them, review the applicable terms from the asset
 source and Apple's current marketing and trademark guidelines. Replace or
 remove the files if your use is not permitted.
 
-The iPad Pro (M5) frame files were supplied to this repository as local assets;
-no upstream license file or redistribution grant accompanies them. Treat them
-as unlicensed third-party artwork unless you can independently confirm the
-source and applicable permission.
+The iPad Pro (M5) and iPhone Duo frame files were supplied to this repository as
+local assets; no upstream license file or redistribution grant accompanies
+them. Treat them as unlicensed third-party artwork unless you can independently
+confirm the source and applicable permission.
 
 ## Demo screenshot and preview
 

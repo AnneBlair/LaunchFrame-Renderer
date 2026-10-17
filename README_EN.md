@@ -15,12 +15,13 @@ LaunchFrame Renderer is a zero-dependency HTML tool for creating App Store promo
 - Reorder or remove screenshots from the poster sequence
 - Choose one of nine iPhone layouts per poster: Classic Hero, Editorial Shift, Focus Lens, Duo Flow, Duo Compare, Depth Stack, Arc Fan, Step Cascade, or Card Gallery
 - Choose one of twelve iPad layouts per poster: eight iPad-only compositions plus Ecosystem Hero, Capture to Canvas, Continuity Stack, and Companion Mode
-- Keep portrait iPhone companion screenshots in a dedicated iPad-side asset pool that never enters the poster order or exports independently
+- Keep iPhone companion screenshots in a dedicated iPad-side asset pool that never enters the poster order or exports independently
 - Share one primary frame and one of four curated themes—Porcelain, Midnight, Aurora, or Electric—across each product set; iPad cross-device layouts also share one companion iPhone frame
 - Automatically fill up to three screenshot slots from the poster order, with stable manual overrides
 - Drop a local image anywhere on a single-screen poster or into a specific multi-screen frame, including in Focus Preview; multi-screen slots can also be dragged to swap them
 - Safely tune scale, vertical offset, spread, and tilt; mirror supported iPad compositions; and add optional one-line step annotations
-- Choose from 15 portrait frames for iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max, and iPhone Air
+- Choose from 25 frames for iPhone 17, iPhone 17 Pro, iPhone 17 Pro Max, iPhone Air, and iPhone Duo
+- Use ten iPhone Duo frames: Night Sky or Star White in Inner Open Portrait/Landscape, Outer Closed Portrait/Landscape, or Outer Open views, also available as iPad companion frames
 - Choose from four landscape Space Black or Silver frames for the 11-inch and 13-inch iPad Pro (M5)
 - Start the iPad editor with a bundled `2360 × 1640` sample screenshot and the 13-inch Silver frame
 - Automatically match the closest 11-inch or 13-inch iPad frame from the first imported screenshot's aspect ratio
@@ -65,7 +66,7 @@ Click a thumbnail to edit that poster. The headline, supporting copy, screenshot
 
 For two- and three-screen layouts, secondary slots automatically use the next unique screenshots in sequence and wrap when necessary. You can override slots manually; the override remains stable after reordering and falls back automatically if the referenced screenshot is deleted. You can also drag one preview image onto another to swap them. Drop a local image anywhere on a single-screen poster to display it immediately and add it to the screenshot set, or into a specific frame in a multi-screen layout to fill that slot. Finder files and image files exposed by external apps are accepted; URL-only web images receive a visible save-to-disk prompt instead of failing silently. Export is disabled when a required slot is empty, an image cannot be read, copy enters the device safe area, or a step label overflows.
 
-The iPad editor groups four additional layouts under **Cross-device collaboration**. They keep the current iPad poster as the primary screen and require one portrait iPhone companion screenshot. Companion assets can be imported, selected, fitted, and removed independently; stable asset IDs preserve page-level assignments, and a deleted reference falls back to the next available asset. The default companion frame is iPhone Air in Cloud White. Use these layouts only for real implemented behavior—do not imply sync, continuity, or live collaboration unless the app actually provides it.
+The iPad editor groups four additional layouts under **Cross-device collaboration**. They keep the current iPad poster as the primary screen and require one iPhone companion screenshot. Portrait frames require portrait screenshots; select a landscape Duo frame before adding a landscape screenshot. Companion assets can be imported, selected, fitted, and removed independently; stable asset IDs preserve page-level assignments, and a deleted reference falls back to the next available asset. The default companion frame is iPhone Air in Cloud White. Use these layouts only for real implemented behavior—do not imply sync, continuity, or live collaboration unless the app actually provides it.
 
 The Classic layout retains the existing device-width and vertical-position controls. New layouts expose bounded scale, vertical offset, spread, and tilt controls. iPhone Focus Lens and iPad Detail Callout also expose horizontal and vertical focus controls, and supported iPad layouts can be mirrored. Screenshots imported through the editor controls still start with Classic; dropping onto a single-screen canvas or a cross-device primary frame keeps the current composition.
 
@@ -107,7 +108,7 @@ The render-only view supports the following query parameters:
 | `annotations` | Set to `1` to show the supported connector, numbers, and labels | `annotations=1` |
 | `annotation1`…`annotation3` | Up to three single-line step labels | `annotation1=Choose%20a%20source` |
 | `focusX` / `focusY` | Focus Lens or Detail Callout position in the `0.2–0.8` range | `focusX=0.62` |
-| `iphoneScreenshot` | Portrait iPhone screenshot URL required by iPad cross-device layouts | `iphoneScreenshot=./screens/phone-home.png` |
+| `iphoneScreenshot` | iPhone screenshot URL required by iPad cross-device layouts; landscape images require a landscape Duo frame | `iphoneScreenshot=./screens/phone-home.png` |
 | `iphoneFit` | Companion screenshot fit: `cover` or `contain` | `iphoneFit=contain` |
 | `iphoneFrame` | Companion frame ID; defaults to `iphone-air-cloud-white` | `iphoneFrame=iphone-air-cloud-white` |
 
@@ -117,6 +118,7 @@ Example:
 
 ```text
 http://localhost:4173/?render=1&frame=iphone-17-pro-max-deep-blue&deviceTop=730
+http://localhost:4173/?render=1&frame=iphone-duo-inner-open-landscape-night-sky
 http://localhost:4173/?render=1&layout=duo-flow&theme=midnight&screenshot=./screens/input.png&screenshot2=./screens/result.png&annotations=1&annotation1=Choose%20a%20source&annotation2=Ready%20to%20learn
 http://localhost:4173/ipad.html?render=1&frame=ipad-pro-m5-13-space-black&screenshot=./screens/ipad-home.png
 http://localhost:4173/ipad.html?render=1&layout=master-detail&theme=aurora&frame=ipad-pro-m5-13-silver&screenshot=./screens/ipad-home.png&screenshot2=./screens/ipad-list.png&screenshot3=./screens/ipad-detail.png
@@ -127,7 +129,7 @@ iPhone `layout` values are `classic`, `editorial-shift`, `focus-lens`, `duo-flow
 
 iPad `layout` values are `classic`, `editorial-split`, `panorama-stage`, `detail-callout`, `duo-flow`, `compare-split`, `master-detail`, `window-gallery`, `ecosystem-hero`, `capture-to-canvas`, `continuity-stack`, and `companion-mode`. The final four require `iphoneScreenshot`. IDs that belong to the other product—or are unknown—fall back safely to `classic`. With no new parameters, both products keep using the original Classic rendering path.
 
-Render-only mode exposes `data-render-state="loading"`, `ready`, or `error` on `<body>`. Missing slots, unreadable images, a non-portrait iPhone companion, copy entering the device safe area, and overflowing labels set `error` and provide a reason in `data-render-error`. Browser automation should wait for `ready` instead of silently capturing an invalid poster.
+Render-only mode exposes `data-render-state="loading"`, `ready`, or `error` on `<body>`. Missing slots, unreadable images, a landscape iPhone companion in a portrait frame, copy entering the device safe area, and overflowing labels set `error` and provide a reason in `data-render-error`. Browser automation should wait for `ready` instead of silently capturing an invalid poster.
 
 Capture the page with the viewport that matches the selected renderer—`1320 × 2868` for iPhone or `2732 × 2048` for iPad—to obtain the complete poster canvas. Simulator screenshot paths and localized copy can be injected through the query parameters for automated rendering.
 

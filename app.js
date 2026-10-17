@@ -40,6 +40,52 @@ const PRODUCT_CONFIGS = Object.freeze({
         screenHeight: 2736,
         screenRadius: 158,
       },
+      "iphone-duo-inner-open-portrait": {
+        // Overlap the transparent aperture by 2 px to avoid seams under the frame.
+        frameWidth: 2247,
+        frameHeight: 3093,
+        screenX: 118,
+        screenY: 118,
+        screenWidth: 2011,
+        screenHeight: 2857,
+        screenRadius: 168,
+      },
+      "iphone-duo-inner-open-landscape": {
+        frameWidth: 3093,
+        frameHeight: 2247,
+        screenX: 118,
+        screenY: 118,
+        screenWidth: 2857,
+        screenHeight: 2011,
+        screenRadius: 168,
+      },
+      "iphone-duo-outer-closed-portrait": {
+        frameWidth: 1574,
+        frameHeight: 2194,
+        screenX: 86,
+        screenY: 78,
+        screenWidth: 1402,
+        screenHeight: 2038,
+        screenRadius: [32, 182, 182, 32], // Top-left, top-right, bottom-right, bottom-left.
+      },
+      "iphone-duo-outer-closed-landscape": {
+        frameWidth: 2194,
+        frameHeight: 1574,
+        screenX: 78,
+        screenY: 86,
+        screenWidth: 2038,
+        screenHeight: 1402,
+        screenRadius: [182, 182, 32, 32],
+      },
+      "iphone-duo-outer-open": {
+        frameWidth: 3056,
+        frameHeight: 2194,
+        screenX: 1568,
+        screenY: 78,
+        screenWidth: 1402,
+        screenHeight: 2038,
+        screenRadius: [32, 182, 182, 32],
+      },
     },
     frameGroups: [
       {
@@ -89,6 +135,23 @@ const PRODUCT_CONFIGS = Object.freeze({
           ["space-black", "深空黑色", "Space Black"],
         ],
       },
+      ...[
+        ["inner-open-portrait", "内屏展开 · 竖版", "Inner Open Portrait"],
+        ["inner-open-landscape", "内屏展开 · 横版", "Inner Open Landscape"],
+        ["outer-closed-portrait", "外屏折叠 · 竖版", "Outer Closed Portrait"],
+        ["outer-closed-landscape", "外屏折叠 · 横版", "Outer Closed Landscape"],
+        ["outer-open", "外侧展开", "Outer Open"],
+      ].map(([view, label, orientation]) => ({
+        label: `iPhone Duo · ${label}`,
+        assetName: "iPhone Duo",
+        model: `iphone-duo-${view}`,
+        folder: "iPhone Duo",
+        orientation,
+        colors: [
+          ["night-sky", "夜空色", "Night Sky"],
+          ["star-white", "星白色", "Star White"],
+        ],
+      })),
     ],
     defaults: {
       title: "不只是背单词，\n更要真正掌握语言",
@@ -603,6 +666,20 @@ function toPercent(value, whole) {
   return `${((value / whole) * 100).toFixed(6)}%`;
 }
 
+function getScreenRadii(geometry, scale = 1) {
+  const radii = Array.isArray(geometry.screenRadius)
+    ? geometry.screenRadius
+    : Array(4).fill(geometry.screenRadius);
+  return radii.map((radius) => radius * scale);
+}
+
+function getScreenBorderRadius(geometry) {
+  const radii = getScreenRadii(geometry);
+  return `${radii.map((radius) => toPercent(radius, geometry.screenWidth)).join(" ")} / ${
+    radii.map((radius) => toPercent(radius, geometry.screenHeight)).join(" ")
+  }`;
+}
+
 function normalizeFitModeForProduct(targetProduct, fit) {
   const availableModes =
     targetProduct === "ipad" ? ["fill", "cover", "contain"] : ["cover", "contain"];
@@ -772,10 +849,7 @@ function applyFrame(frameId) {
   elements.deviceScreen.style.top = toPercent(geometry.screenY, geometry.frameHeight);
   elements.deviceScreen.style.width = toPercent(geometry.screenWidth, geometry.frameWidth);
   elements.deviceScreen.style.height = toPercent(geometry.screenHeight, geometry.frameHeight);
-  elements.deviceScreen.style.borderRadius = `${toPercent(
-    geometry.screenRadius,
-    geometry.screenWidth,
-  )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
+  elements.deviceScreen.style.borderRadius = getScreenBorderRadius(geometry);
 }
 
 function getLayoutPreset(page = getActivePage()) {
@@ -882,8 +956,21 @@ function getPageLayoutValidation(page = getActivePage()) {
     return { valid: Boolean(page.screenshot), errors: page.screenshot ? [] : ["截图为空"] };
   }
   const preset = getLayoutPreset(page);
+  const definitions = getPresetSlotDefinitions(page);
+  // Frame orientation is shared, so recheck even slots on inactive posters.
+  const slots = resolvePageSlots(page).map((slot, index) => {
+    if (!slot?.imageWidth || !slot?.imageHeight) return slot;
+    return {
+      ...slot,
+      validationError: preset.id === "classic" ? null : getImageValidationError(
+        definitions[index].product,
+        slot.imageWidth,
+        slot.imageHeight,
+      ),
+    };
+  });
   const validation = LAYOUT_ENGINE.validateComposition({
-    slots: resolvePageSlots(page),
+    slots,
     slotCount: preset.slotCount,
     annotationOverflow: page.annotationOverflow,
   });
@@ -1019,7 +1106,11 @@ function decorateCompositionSlot(wrapper, node, slotPage) {
 }
 
 function getImageValidationError(targetProduct, width, height) {
-  if (targetProduct === "iphone" && width >= height) return "iPhone 辅助截图应为竖版";
+  if (targetProduct === "iphone" && width >= height) {
+    const frameId = targetProduct === productKey ? state.frame : state.companionFrame;
+    const { geometry } = getFrameContext(targetProduct, frameId);
+    if (geometry.screenWidth < geometry.screenHeight) return "iPhone 辅助截图应为竖版";
+  }
   return null;
 }
 
@@ -1036,7 +1127,7 @@ function trackCompositionImage(image, page, placeholder, targetProduct = product
       image.naturalWidth,
       image.naturalHeight,
     );
-    page.imageState = page.validationError ? "error" : "ready";
+    page.imageState = "ready";
     image.hidden = Boolean(page.validationError);
     placeholder.hidden = true;
     if (page.validationError) {
@@ -1073,10 +1164,7 @@ function createDeviceNode(node, slotPage, frame, geometry, frameConfig) {
   screen.style.top = toPercent(geometry.screenY, geometry.frameHeight);
   screen.style.width = toPercent(geometry.screenWidth, geometry.frameWidth);
   screen.style.height = toPercent(geometry.screenHeight, geometry.frameHeight);
-  screen.style.borderRadius = `${toPercent(
-    geometry.screenRadius,
-    geometry.screenWidth,
-  )} / ${toPercent(geometry.screenRadius, geometry.screenHeight)}`;
+  screen.style.borderRadius = getScreenBorderRadius(geometry);
 
   const screenshot = document.createElement("img");
   screenshot.draggable = false;
@@ -1702,7 +1790,7 @@ function renderCompanionAssets(page, preset, slots) {
     String(isImporting || isExporting || state.companionAssets.length >= MAX_SCREENSHOTS),
   );
   if (!selectedAsset) {
-    setCompanionScreenshotStatus("添加一张真实的竖版 iPhone 截图后即可导出。", true);
+    setCompanionScreenshotStatus("添加一张真实的 iPhone 截图后即可导出；横版截图需选择横版 Duo 机框。", true);
   } else if (!selectedAsset.validationError) {
     setCompanionScreenshotStatus("iPhone 截图只服务当前跨设备构图，不会单独导出。");
   }
@@ -2002,14 +2090,16 @@ async function decodeImage(image, label) {
 }
 
 function roundedRectPath(context, x, y, width, height, radius) {
-  const safeRadius = Math.min(radius, width / 2, height / 2);
+  const [topLeft, topRight, bottomRight, bottomLeft] = (
+    Array.isArray(radius) ? radius : Array(4).fill(radius)
+  ).map((value) => Math.min(value, width / 2, height / 2));
 
   context.beginPath();
-  context.moveTo(x + safeRadius, y);
-  context.arcTo(x + width, y, x + width, y + height, safeRadius);
-  context.arcTo(x + width, y + height, x, y + height, safeRadius);
-  context.arcTo(x, y + height, x, y, safeRadius);
-  context.arcTo(x, y, x + width, y, safeRadius);
+  context.moveTo(x + topLeft, y);
+  context.arcTo(x + width, y, x + width, y + height, topRight);
+  context.arcTo(x + width, y + height, x, y + height, bottomRight);
+  context.arcTo(x, y + height, x, y, bottomLeft);
+  context.arcTo(x, y, x + width, y, topLeft);
   context.closePath();
 }
 
@@ -2199,7 +2289,7 @@ function drawPoster(context, snapshot, screenshotImage, frameImage) {
     screenY,
     screenWidth,
     screenHeight,
-    geometry.screenRadius * deviceScale,
+    getScreenRadii(geometry, deviceScale),
   );
   context.clip();
   context.fillStyle = "#f2f4f5";
@@ -2304,7 +2394,7 @@ function drawCompositionDevice(
     screenY,
     screenWidth,
     screenHeight,
-    geometry.screenRadius * deviceScale,
+    getScreenRadii(geometry, deviceScale),
   );
   context.clip();
   context.fillStyle = "#f2f4f5";

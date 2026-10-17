@@ -487,6 +487,95 @@ async function withIphonePage(run) {
   }
 }
 
+const DUO_VIEWS = [
+  { view: "inner-open-portrait", width: 2247, height: 3093, aperture: [120, 120, 2127, 2973] },
+  { view: "inner-open-landscape", width: 3093, height: 2247, aperture: [120, 120, 2973, 2127] },
+  { view: "outer-closed-portrait", width: 1574, height: 2194, aperture: [88, 80, 1486, 2114] },
+  { view: "outer-closed-landscape", width: 2194, height: 1574, aperture: [80, 88, 2114, 1486] },
+  { view: "outer-open", width: 3056, height: 2194, aperture: [1570, 80, 2968, 2114] },
+];
+const DUO_FRAMES = DUO_VIEWS.flatMap((view) =>
+  ["night-sky", "star-white"].map((color) => ({
+    ...view,
+    id: `iphone-duo-${view.view}-${color}`,
+  })),
+);
+const DUO_SCREEN_COLOR = [28, 212, 127, 255];
+
+async function selectFrame(page, frameId, companion = false) {
+  const selector = companion ? "#iphoneFrameSelect" : "#frameSelect";
+  await page.evaluate(`(() => {
+    const select = document.querySelector(${JSON.stringify(selector)});
+    select.value = ${JSON.stringify(frameId)};
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  })()`);
+}
+
+async function assertDuoScreenPixels(page, frameCase, companion) {
+  const result = await page.evaluate(`(async () => {
+    const expected = ${JSON.stringify(frameCase)};
+    const snapshot = createRenderSnapshot(getActivePage());
+    const image = document.querySelector(${JSON.stringify(
+      companion ? '.composition-device[data-product="iphone"] .composition-frame' : "#frameImage",
+    )});
+    const scene = LAYOUT_ENGINE.resolveComposition({
+      layoutId: snapshot.layoutId,
+      tuning: snapshot.layoutTuning,
+      classicDeviceWidth: snapshot.deviceWidth,
+      classicDeviceTop: snapshot.deviceTop,
+    });
+    const node = ${companion ? 'scene.nodes.find((item) => item.product === "iphone")' : "scene.nodes[0]"};
+    const scale = node.width / expected.width;
+    const radians = node.rotation * Math.PI / 180;
+    const [left, top, right, bottom] = expected.aperture;
+    const points = [0.2, 0.5, 0.8].flatMap((fy) => [0.2, 0.5, 0.8].map((fx) => {
+      const x = (left + (right - left) * fx) * scale - node.width / 2;
+      const y = (top + (bottom - top) * fy) * scale;
+      return {
+        x: Math.round(node.cx + x * Math.cos(radians) - y * Math.sin(radians)),
+        y: Math.round(node.top + x * Math.sin(radians) + y * Math.cos(radians)),
+      };
+    }));
+    const { canvas, context } = createExportCanvas();
+    const blob = await renderSnapshotToBlob(snapshot, canvas, context, new Map());
+    const bitmap = await createImageBitmap(blob);
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0);
+    const colors = points.map(({ x, y }) => [...context.getImageData(x, y, 1, 1).data]);
+    return {
+      colors,
+      dimensions: [image.naturalWidth, image.naturalHeight],
+      exportDimensions: [bitmap.width, bitmap.height],
+      mimeType: blob.type,
+      points,
+    };
+  })()`);
+  assert.deepEqual(result.dimensions, [frameCase.width, frameCase.height], frameCase.id);
+  assert.deepEqual(result.exportDimensions, companion ? [2732, 2048] : [1320, 2868]);
+  assert.equal(result.mimeType, "image/png");
+  for (const color of result.colors) {
+    assert.deepEqual(color, DUO_SCREEN_COLOR, `${frameCase.id} Canvas 屏幕应完整填充`);
+  }
+
+  const screenshot = await page.client.send(
+    "Page.captureScreenshot",
+    { format: "png", captureBeyondViewport: false },
+    page.sessionId,
+  );
+  const domColors = await page.evaluate(`(async () => {
+    const image = await loadImage(${JSON.stringify(`data:image/png;base64,${screenshot.data}`)}, "DOM 预览");
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, 0, 0);
+    return ${JSON.stringify(result.points)}.map(({ x, y }) => [...context.getImageData(x, y, 1, 1).data]);
+  })()`);
+  for (const color of domColors) {
+    assert.deepEqual(color, DUO_SCREEN_COLOR, `${frameCase.id} DOM 屏幕应完整填充`);
+  }
+}
+
 test.before(async () => {
   if (!CHROME_PATH) return;
   assert.ok(existsSync(FIXTURE_PATH), `缺少拖放测试图片：${FIXTURE_PATH}`);
@@ -946,4 +1035,219 @@ test(
       assert.match(state.activeLabel, new RegExp(FIXTURE_NAME.replaceAll(".", "\\.")));
       assert.match(state.status, /新增为当前宣传图/);
     }),
+);
+
+test(
+  "iPhone Duo 的十款机框可用于主屏与辅助屏且 DOM 和 PNG 屏幕完整填充",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 90_000 },
+  async () => {
+    for (const companion of [false, true]) {
+      const page = companion
+        ? await openIpadRenderPage({ layout: "ecosystem-hero", title: "", subtitle: "" }, "Duo 辅助机框")
+        : await openIphoneRenderPage({ title: "", subtitle: "" }, "Duo 主机框");
+      try {
+        const optionIds = await page.evaluate(
+          `[...document.querySelector(${JSON.stringify(companion ? "#iphoneFrameSelect" : "#frameSelect")}).options].map((option) => option.value).filter((id) => id.startsWith("iphone-duo-"))`,
+        );
+        assert.deepEqual(optionIds.sort(), DUO_FRAMES.map((frame) => frame.id).sort());
+        await page.evaluate(`(() => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 800;
+          canvas.height = 1200;
+          const context = canvas.getContext("2d");
+          context.fillStyle = "rgb(28, 212, 127)";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          const asset = ${companion ? "state.companionAssets[0]" : "getActivePage()"};
+          asset.screenshot = canvas.toDataURL("image/png");
+          asset.imageWidth = canvas.width;
+          asset.imageHeight = canvas.height;
+          asset.imageState = "loading";
+          asset.validationError = null;
+          ${companion ? "" : "applyScreenshot();"}
+          applyComposition();
+        })()`);
+        for (const frameCase of DUO_FRAMES) {
+          await selectFrame(page, frameCase.id, companion);
+          await page.waitFor(
+            `document.body.dataset.renderState === "ready" && ${companion ? "state.companionFrame" : "state.frame"} === ${JSON.stringify(frameCase.id)}`,
+            `${frameCase.id} 读取完成`,
+          );
+          await assertDuoScreenPixels(page, frameCase, companion);
+        }
+      } finally {
+        await page.close();
+      }
+    }
+  },
+);
+
+test(
+  "Duo 横屏允许 iPhone 多屏横版截图且切回竖屏会恢复方向校验",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
+  async () => {
+    const page = await openIphoneRenderPage({
+      frame: "iphone-duo-inner-open-landscape-night-sky",
+      layout: "duo-flow",
+      screenshot2: "./assets/sample-ipad-screenshot.png",
+      title: "",
+      subtitle: "",
+    }, "Duo 横版多屏截图");
+    try {
+      for (const frameId of ["iphone-air-cloud-white", "iphone-duo-outer-open-night-sky"]) {
+        await selectFrame(page, frameId);
+        await page.waitFor(
+          `document.body.dataset.renderState === "error"`,
+          `${frameId} 应拒绝横版截图`,
+        );
+        assert.match(await page.evaluate(`document.body.dataset.renderError`), /竖版/);
+      }
+      await selectFrame(page, "iphone-duo-outer-closed-landscape-star-white");
+      await page.waitFor(
+        `document.body.dataset.renderState === "ready"`,
+        "切回 Duo 横屏后清除旧的方向错误",
+      );
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+test(
+  "Duo 横屏辅助机框允许横版截图且外屏展开仍按实际竖屏校验",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
+  async () => {
+    const page = await openIpadRenderPage({
+      iphoneFrame: "iphone-duo-outer-closed-landscape-night-sky",
+      iphoneScreenshot: "./assets/sample-ipad-screenshot.png",
+      layout: "ecosystem-hero",
+      title: "",
+      subtitle: "",
+    }, "Duo 横版辅助截图");
+    try {
+      for (const frameId of ["iphone-air-cloud-white", "iphone-duo-outer-open-star-white"]) {
+        await selectFrame(page, frameId, true);
+        await page.waitFor(
+          `document.body.dataset.renderState === "error"`,
+          `${frameId} 辅助屏应拒绝横版截图`,
+        );
+        assert.match(await page.evaluate(`document.body.dataset.renderError`), /竖版/);
+      }
+      await selectFrame(page, "iphone-duo-inner-open-landscape-star-white", true);
+      await page.waitFor(
+        `document.body.dataset.renderState === "ready"`,
+        "切回 Duo 横屏辅助机框后清除旧的方向错误",
+      );
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+test(
+  "切回 Duo 横屏会清除未显示宣传图的方向错误并恢复整组导出",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
+  async () => {
+    const page = await openIphoneRenderPage({
+      frame: "iphone-duo-inner-open-landscape-night-sky",
+      title: "",
+      subtitle: "",
+    }, "Duo 多页方向校验");
+    try {
+      await page.evaluate(`(() => {
+        state.pages = [0, 1, 2, 3].map((index) => createPage({
+          title: "",
+          subtitle: "",
+          screenshot: "./assets/sample-ipad-screenshot.png",
+          screenshotName: "横版截图 " + (index + 1),
+          fit: "cover",
+          imageWidth: 2360,
+          imageHeight: 1640,
+          imageState: "ready",
+          layoutId: "duo-flow",
+        }));
+        state.activePageId = state.pages[0].id;
+        applyState();
+      })()`);
+      await page.waitFor(`document.body.dataset.renderState === "ready"`, "读取第一组双屏");
+      await selectFrame(page, "iphone-air-cloud-white");
+      await page.waitFor(
+        `state.pages[0].validationError && state.pages[1].validationError`,
+        "竖版机框标记第一组方向错误",
+      );
+      await page.evaluate(`selectPage(state.pages[2].id)`);
+      await page.waitFor(
+        `state.pages[2].validationError && state.pages[3].validationError`,
+        "竖版机框标记另一组方向错误",
+      );
+      await selectFrame(page, "iphone-duo-inner-open-landscape-star-white");
+      await page.waitFor(`document.body.dataset.renderState === "ready"`, "恢复横屏机框");
+      const result = await page.evaluate(`({
+        errors: state.pages.map((item) => getPageLayoutValidation(item).errors),
+        exportAllDisabled: document.querySelector("#exportAllButton").disabled,
+      })`);
+      assert.deepEqual(result.errors, [[], [], [], []]);
+      assert.equal(result.exportAllDisabled, false);
+    } finally {
+      await page.close();
+    }
+  },
+);
+
+test(
+  "切回 Duo 横屏辅助机框会重新校验其他宣传图引用的辅助素材",
+  { skip: CHROME_PATH ? false : CHROME_SKIP_REASON, timeout: 25_000 },
+  async () => {
+    const page = await openIpadRenderPage({
+      iphoneFrame: "iphone-duo-inner-open-landscape-night-sky",
+      layout: "ecosystem-hero",
+      title: "",
+      subtitle: "",
+    }, "Duo 多页辅助素材校验");
+    try {
+      await page.evaluate(`(() => {
+        state.companionAssets = [0, 1].map((index) => createCompanionAsset({
+          screenshot: "./assets/sample-ipad-screenshot.png",
+          screenshotName: "横版辅助截图 " + (index + 1),
+          imageWidth: 2360,
+          imageHeight: 1640,
+          imageState: "ready",
+        }));
+        state.pages = state.companionAssets.map((asset) => createPage({
+          title: "",
+          subtitle: "",
+          screenshot: "./assets/sample-ipad-screenshot.png",
+          screenshotName: "iPad 主截图",
+          fit: "fill",
+          imageWidth: 2360,
+          imageHeight: 1640,
+          imageState: "ready",
+          layoutId: "ecosystem-hero",
+          companionAssetId: asset.id,
+        }));
+        state.activePageId = state.pages[0].id;
+        applyState();
+      })()`);
+      await page.waitFor(`document.body.dataset.renderState === "ready"`, "读取第一张辅助素材");
+      await selectFrame(page, "iphone-air-cloud-white", true);
+      await page.waitFor(
+        `Boolean(state.companionAssets[0].validationError)`,
+        "标记第一张辅助素材方向错误",
+      );
+      await page.evaluate(`selectPage(state.pages[1].id)`);
+      await page.waitFor(
+        `Boolean(state.companionAssets[1].validationError)`,
+        "标记另一张辅助素材方向错误",
+      );
+      await selectFrame(page, "iphone-duo-inner-open-landscape-star-white", true);
+      await page.waitFor(`document.body.dataset.renderState === "ready"`, "恢复横屏辅助机框");
+      const result = await page.evaluate(`({
+        errors: state.pages.map((item) => getPageLayoutValidation(item).errors),
+        exportAllDisabled: document.querySelector("#exportAllButton").disabled,
+      })`);
+      assert.deepEqual(result.errors, [[], []]);
+      assert.equal(result.exportAllDisabled, false);
+    } finally {
+      await page.close();
+    }
+  },
 );
